@@ -1,9 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import type { User, Message } from "../../types";
 import {
   mockConversations,
-  getMessagesByConversation,
   mockProperties,
 } from "../../services/mockData";
 import ChatInterface from "../../components/chat/ChatInterface";
@@ -18,31 +17,61 @@ const LandlordInbox: React.FC<LandlordInboxProps> = ({ user }) => {
   const [selectedConversation, setSelectedConversation] = useState<string | null>(
     conversationId || null
   );
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [suggestedReply, setSuggestedReply] = useState<string | null>(null);
+  const [summary, setSummary] = useState<string | null>(null);
+  
   const conversations = mockConversations.filter((c) => c.landlordId === user.id);
 
   const conversation = selectedConversation
     ? conversations.find((c) => c.id === selectedConversation)
     : conversations[0];
-
-  // Initialize messages from mock data, but allow updates
-  const initialMessages = conversation ? getMessagesByConversation(conversation.id) : [];
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
-  const [suggestedReply, setSuggestedReply] = useState<string | null>(null);
-  const [summary, setSummary] = useState<string | null>(null);
   
   const property = conversation
     ? mockProperties.find((p) => p.id === conversation.propertyId)
     : null;
 
-  // Update messages when conversation changes
-  React.useEffect(() => {
-    if (conversation) {
-      const newMessages = getMessagesByConversation(conversation.id);
-      setMessages(newMessages);
-      setSuggestedReply(null);
-      setSummary(null);
-    }
-  }, [conversation?.id]);
+  // Load messages from backend when conversation changes
+  useEffect(() => {
+    const loadMessages = async () => {
+      if (!conversation) {
+        setMessages([]);
+        return;
+      }
+
+      setIsLoadingMessages(true);
+      try {
+        const response = await apiService.getConversation(conversation.id);
+        // Convert API response to Message format
+        const loadedMessages: Message[] = response.messages.map((msg: any) => ({
+          id: msg.id || `msg-${Date.now()}-${Math.random()}`,
+          conversationId: conversation.id,
+          senderId: msg.senderId || (msg.role === "assistant" ? "ai-assistant" : user.id),
+          senderType: msg.senderType || (msg.role === "assistant" ? "AI" : user.role),
+          content: msg.content,
+          timestamp: msg.timestamp || new Date().toISOString(),
+          metadata: msg.metadata || {},
+        }));
+        
+        // Sort by timestamp
+        loadedMessages.sort((a, b) => 
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+        
+        setMessages(loadedMessages);
+        setSuggestedReply(null);
+        setSummary(null);
+      } catch (error) {
+        console.error("Failed to load messages:", error);
+        setMessages([]);
+      } finally {
+        setIsLoadingMessages(false);
+      }
+    };
+
+    loadMessages();
+  }, [conversation?.id, user.id, user.role]);
 
   const handleSendMessage = (content: string) => {
     // Add user message optimistically
@@ -173,54 +202,60 @@ const LandlordInbox: React.FC<LandlordInboxProps> = ({ user }) => {
 
         <div className="chat-main">
           {conversation && property ? (
-            <div className="chat-wrapper">
-              <div className="chat-actions-bar">
-                <button className="btn-secondary btn-sm" onClick={handleSuggestReply}>
-                  💡 Suggest Reply
-                </button>
-                <button className="btn-secondary btn-sm" onClick={handleSummarize}>
-                  📝 Summarize Thread
-                </button>
+            isLoadingMessages ? (
+              <div className="empty-chat">
+                <p>Loading messages...</p>
               </div>
-              
-              {suggestedReply && (
-                <div className="suggestion-panel">
-                  <div className="suggestion-header">
-                    <strong>Suggested Reply:</strong>
-                    <button className="btn-link btn-sm" onClick={() => setSuggestedReply(null)}>
-                      ✕
-                    </button>
-                  </div>
-                  <p>{suggestedReply}</p>
-                  <button className="btn-primary btn-sm" onClick={useSuggestedReply}>
-                    Use This Reply
+            ) : (
+              <div className="chat-wrapper">
+                <div className="chat-actions-bar">
+                  <button className="btn-secondary btn-sm" onClick={handleSuggestReply}>
+                    💡 Suggest Reply
+                  </button>
+                  <button className="btn-secondary btn-sm" onClick={handleSummarize}>
+                    📝 Summarize Thread
                   </button>
                 </div>
-              )}
-
-              {summary && (
-                <div className="suggestion-panel">
-                  <div className="suggestion-header">
-                    <strong>Conversation Summary:</strong>
-                    <button className="btn-link btn-sm" onClick={() => setSummary(null)}>
-                      ✕
+                
+                {suggestedReply && (
+                  <div className="suggestion-panel">
+                    <div className="suggestion-header">
+                      <strong>Suggested Reply:</strong>
+                      <button className="btn-link btn-sm" onClick={() => setSuggestedReply(null)}>
+                        ✕
+                      </button>
+                    </div>
+                    <p>{suggestedReply}</p>
+                    <button className="btn-primary btn-sm" onClick={useSuggestedReply}>
+                      Use This Reply
                     </button>
                   </div>
-                  <p>{summary}</p>
-                </div>
-              )}
+                )}
 
-              <ChatInterface
-                conversation={conversation}
-                messages={messages}
-                property={property}
-                currentUser={user}
-                onSendMessage={handleSendMessage}
-                onAskAI={handleAskAI}
-                onNewMessage={handleNewMessage}
-                onIncidentCreated={handleIncidentCreated}
-              />
-            </div>
+                {summary && (
+                  <div className="suggestion-panel">
+                    <div className="suggestion-header">
+                      <strong>Conversation Summary:</strong>
+                      <button className="btn-link btn-sm" onClick={() => setSummary(null)}>
+                        ✕
+                      </button>
+                    </div>
+                    <p>{summary}</p>
+                  </div>
+                )}
+
+                <ChatInterface
+                  conversation={conversation}
+                  messages={messages}
+                  property={property}
+                  currentUser={user}
+                  onSendMessage={handleSendMessage}
+                  onAskAI={handleAskAI}
+                  onNewMessage={handleNewMessage}
+                  onIncidentCreated={handleIncidentCreated}
+                />
+              </div>
+            )
           ) : (
             <div className="empty-chat">
               <p>Select a conversation to view messages</p>

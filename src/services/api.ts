@@ -71,7 +71,10 @@ class ApiService {
     options: RequestInit = {}
   ): Promise<T> {
     try {
-      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      const url = `${this.baseUrl}${endpoint}`;
+      console.log(`API Request: ${options.method || 'GET'} ${url}`, options.body);
+      
+      const response = await fetch(url, {
         ...options,
         headers: {
           "Content-Type": "application/json",
@@ -83,10 +86,13 @@ class ApiService {
         const error = await response.json().catch(() => ({
           detail: `HTTP ${response.status}: ${response.statusText}`,
         }));
+        console.error(`API Error: ${endpoint}`, error);
         throw new Error(error.detail || "API request failed");
       }
 
-      return await response.json();
+      const data = await response.json();
+      console.log(`API Response: ${endpoint}`, data);
+      return data;
     } catch (error) {
       console.error(`API request failed: ${endpoint}`, error);
       throw error;
@@ -142,8 +148,75 @@ class ApiService {
     return this.request(`/api/conversations/${conversationId}`);
   }
 
+  async getAllIncidents(propertyId?: string, landlordId?: string): Promise<{
+    incidents: Array<{
+      id: string;
+      property_id: string;
+      conversation_id?: string;
+      description: string;
+      category: string;
+      severity: string;
+      status: string;
+      created_at: string;
+      resolved_at?: string;
+      ai_suggested?: boolean;
+    }>;
+  }> {
+    const params = new URLSearchParams();
+    if (propertyId) params.append("property_id", propertyId);
+    if (landlordId) params.append("landlord_id", landlordId);
+    const query = params.toString();
+    return this.request(`/api/incidents${query ? `?${query}` : ""}`);
+  }
+
   async getIncident(incidentId: string): Promise<any> {
     return this.request(`/api/incidents/${incidentId}`);
+  }
+
+  async createCalendarEvent(event: {
+    property_id: string;
+    type: "STAY" | "MAINTENANCE" | "CHECK_WINDOW";
+    title: string;
+    start_time: string;
+    end_time: string;
+    status?: "confirmed" | "proposed" | "cancelled";
+    tenant_id?: string;
+    asset_id?: string;
+    incident_id?: string;
+    description?: string;
+  }): Promise<{
+    id: string;
+    property_id: string;
+    type: string;
+    title: string;
+    start_time: string;
+    end_time: string;
+    status: string;
+  }> {
+    return this.request("/api/calendar/events", {
+      method: "POST",
+      body: JSON.stringify(event),
+    });
+  }
+
+  async getAllCalendarEvents(propertyId?: string): Promise<{
+    events: Array<{
+      id: string;
+      property_id: string;
+      type: string;
+      title: string;
+      start_time: string;
+      end_time: string;
+      status: string;
+      tenant_id?: string;
+      asset_id?: string;
+      incident_id?: string;
+      description?: string;
+      is_ai_suggested?: boolean;
+    }>;
+  }> {
+    const params = propertyId ? `?property_id=${propertyId}` : "";
+    return this.request(`/api/calendar/events${params}`);
   }
 }
 

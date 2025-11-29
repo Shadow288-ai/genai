@@ -126,70 +126,11 @@ export const mockConversations: Conversation[] = [
   },
 ];
 
-// Mock Messages
-export const mockMessages: Message[] = [
-  {
-    id: "msg-1",
-    conversationId: "conv-1",
-    senderId: "tenant-1",
-    senderType: "TENANT",
-    content: "Hi! I just checked in. The place looks great!",
-    timestamp: new Date(Date.now() - 3600000).toISOString(),
-  },
-  {
-    id: "msg-2",
-    conversationId: "conv-1",
-    senderId: "ai-assistant",
-    senderType: "AI",
-    content: "Welcome! I'm your property assistant. Feel free to ask me anything about the property, like 'How does the TV work?' or 'Where are the spare keys?'",
-    timestamp: new Date(Date.now() - 3500000).toISOString(),
-  },
-  {
-    id: "msg-3",
-    conversationId: "conv-1",
-    senderId: "tenant-1",
-    senderType: "TENANT",
-    content: "Actually, I noticed the AC is making some strange noises at night. Should I be concerned?",
-    timestamp: new Date(Date.now() - 1800000).toISOString(),
-  },
-  {
-    id: "msg-4",
-    conversationId: "conv-1",
-    senderId: "ai-assistant",
-    senderType: "AI",
-    content: "I've analyzed your concern about the AC. This appears to be a heating/cooling issue with medium severity. I've created a maintenance ticket and suggested some time slots for inspection. The landlord will review this shortly.",
-    timestamp: new Date(Date.now() - 1700000).toISOString(),
-    metadata: {
-      incidentId: "incident-1",
-    },
-  },
-  {
-    id: "msg-5",
-    conversationId: "conv-1",
-    senderId: "landlord-1",
-    senderType: "LANDLORD",
-    content: "Thanks for letting us know! I can have someone check it out tomorrow between 10 AM - 12 PM. Would that work for you?",
-    timestamp: new Date(Date.now() - 900000).toISOString(),
-  },
-];
+// Mock Messages - REMOVED: Messages are now loaded from backend API
+export const mockMessages: Message[] = [];
 
-// Mock Incidents
-export const mockIncidents: Incident[] = [
-  {
-    id: "incident-1",
-    propertyId: "prop-1",
-    assetId: "asset-1",
-    stayId: "stay-1",
-    conversationId: "conv-1",
-    severity: "medium",
-    status: "scheduled",
-    category: "AC",
-    description: "AC making strange noises at night",
-    createdAt: new Date(Date.now() - 1700000).toISOString(),
-    source: "TENANT_MESSAGE",
-    aiSuggested: true,
-  },
-];
+// Mock Incidents - REMOVED: Incidents are now loaded from backend API
+export const mockIncidents: Incident[] = [];
 
 // Mock Calendar Events
 export const mockCalendarEvents: CalendarEvent[] = [
@@ -262,9 +203,8 @@ export const getConversationById = (id: string): Conversation | undefined => {
 };
 
 export const getMessagesByConversation = (conversationId: string): Message[] => {
-  return mockMessages
-    .filter((m) => m.conversationId === conversationId)
-    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  // Messages are now loaded from backend API, return empty array as fallback
+  return [];
 };
 
 export const getStaysByProperty = (propertyId: string): Stay[] => {

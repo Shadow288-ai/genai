@@ -2,9 +2,9 @@
 FastAPI backend for HomeGuard AI
 Provides RAG-powered chat and AI assistant endpoints
 """
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Dict, List
+from typing import Dict, List, Optional
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -30,11 +30,12 @@ app.add_middleware(
 )
 
 # Initialize RAG service
-rag_service = RAGService(model_name="llama3", embedding_model="all-MiniLM-L6-v2")
+rag_service = RAGService(model_name="mistral", embedding_model="all-MiniLM-L6-v2")
 
 # In-memory storage (replace with database in production)
 conversations: Dict[str, List[Dict]] = {}
 incidents: Dict[str, Dict] = {}
+calendar_events: Dict[str, Dict] = {}
 
 # Load house manuals from files
 def load_house_manuals():
@@ -150,7 +151,9 @@ async def chat(request: ChatRequest):
         conversations[request.conversation_id].append({
             "role": "user",
             "content": request.message,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "sender_id": request.user_id,
+            "sender_type": request.user_role
         })
         
         # Check if message might be a question (simple heuristic)
@@ -169,7 +172,13 @@ async def chat(request: ChatRequest):
             conversations[request.conversation_id].append({
                 "role": "assistant",
                 "content": answer,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "sender_id": "ai-assistant",
+                "sender_type": "AI",
+                "metadata": {
+                    "sources": sources,
+                    "isAISuggestion": True
+                }
             })
             
             return ChatResponse(
@@ -212,7 +221,13 @@ The landlord will review this and get back to you with scheduling options."""
             conversations[request.conversation_id].append({
                 "role": "assistant",
                 "content": response_text,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "sender_id": "ai-assistant",
+                "sender_type": "AI",
+                "metadata": {
+                    "incidentId": incident_id,
+                    "isAISuggestion": True
+                }
             })
             
             return ChatResponse(
@@ -228,7 +243,10 @@ The landlord will review this and get back to you with scheduling options."""
         conversations[request.conversation_id].append({
             "role": "assistant",
             "content": response_text,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "sender_id": "ai-assistant",
+            "sender_type": "AI",
+            "metadata": {}
         })
         
         return ChatResponse(
@@ -306,10 +324,64 @@ async def suggest_reply(request: ReplySuggestionRequest):
 @app.get("/api/conversations/{conversation_id}")
 async def get_conversation(conversation_id: str):
     """Get conversation history"""
+    messages = conversations.get(conversation_id, [])
+    
+    # Convert backend format to frontend Message format
+    formatted_messages = []
+    for i, msg in enumerate(messages):
+        # Use stored sender_type if available, otherwise infer from role
+        sender_type = msg.get("sender_type")
+        if not sender_type:
+            if msg.get("role") == "user":
+                sender_type = msg.get("sender_type", "TENANT")
+            elif msg.get("role") == "assistant":
+                sender_type = "AI"
+            else:
+                sender_type = "TENANT"
+        
+        sender_id = msg.get("sender_id")
+        if not sender_id:
+            if msg.get("role") == "assistant":
+                sender_id = "ai-assistant"
+            else:
+                sender_id = msg.get("user_id", "unknown")
+        
+        formatted_messages.append({
+            "id": f"msg-{i}-{msg.get('timestamp', datetime.now().isoformat())}",
+            "conversationId": conversation_id,
+            "senderId": sender_id,
+            "senderType": sender_type,
+            "content": msg.get("content", ""),
+            "timestamp": msg.get("timestamp", datetime.now().isoformat()),
+            "metadata": msg.get("metadata", {})
+        })
+    
     return {
         "conversation_id": conversation_id,
-        "messages": conversations.get(conversation_id, [])
+        "messages": formatted_messages
     }
+
+@app.get("/api/incidents")
+async def get_all_incidents(
+    property_id: Optional[str] = Query(None),
+    landlord_id: Optional[str] = Query(None)
+):
+    """Get all incidents, optionally filtered by property or landlord"""
+    all_incidents = list(incidents.values())
+    
+    # Filter by property if provided
+    if property_id:
+        all_incidents = [i for i in all_incidents if i.get("property_id") == property_id]
+    
+    # Filter by landlord if provided
+    # For now, return all incidents for any landlord (in production, check property ownership)
+    # Since we don't have property ownership data, we'll return all incidents
+    # In production, you'd filter: if landlord_id, only return incidents for properties owned by that landlord
+    
+    # Sort by created date (newest first)
+    all_incidents.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    
+    return {"incidents": all_incidents}
 
 @app.get("/api/incidents/{incident_id}")
 async def get_incident(incident_id: str):
@@ -317,6 +389,49 @@ async def get_incident(incident_id: str):
     if incident_id not in incidents:
         raise HTTPException(status_code=404, detail="Incident not found")
     return incidents[incident_id]
+
+@app.post("/api/calendar/events", response_model=CalendarEventResponse)
+async def create_calendar_event(event: CalendarEventRequest):
+    """Create a new calendar event"""
+    event_id = str(uuid.uuid4())
+    calendar_events[event_id] = {
+        "id": event_id,
+        "property_id": event.property_id,
+        "type": event.type,
+        "title": event.title,
+        "start_time": event.start_time,
+        "end_time": event.end_time,
+        "status": event.status,
+        "tenant_id": event.tenant_id,
+        "asset_id": event.asset_id,
+        "incident_id": event.incident_id,
+        "description": event.description,
+        "is_ai_suggested": False,
+        "created_at": datetime.now().isoformat(),
+    }
+    
+    # Update incident status if linked
+    if event.incident_id and event.incident_id in incidents:
+        incidents[event.incident_id]["status"] = "scheduled"
+        if "scheduled_at" not in incidents[event.incident_id]:
+            incidents[event.incident_id]["scheduled_at"] = event.start_time
+    
+    return calendar_events[event_id]
+
+@app.get("/api/calendar/events")
+async def get_calendar_events(
+    property_id: Optional[str] = Query(None)
+):
+    """Get all calendar events, optionally filtered by property"""
+    all_events = list(calendar_events.values())
+    
+    if property_id:
+        all_events = [e for e in all_events if e.get("property_id") == property_id]
+    
+    # Sort by start time
+    all_events.sort(key=lambda x: x.get("start_time", ""))
+    
+    return {"events": all_events}
 
 if __name__ == "__main__":
     import uvicorn

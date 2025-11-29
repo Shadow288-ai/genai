@@ -1,11 +1,11 @@
-import React, { useState } from "react";
-import type { User } from "../../types";
+import React, { useState, useEffect } from "react";
+import type { User, Incident } from "../../types";
 import {
-  mockIncidents,
   mockRiskScores,
   mockProperties,
   getAssetsByProperty,
 } from "../../services/mockData";
+import { apiService } from "../../services/api";
 
 interface LandlordMaintenanceProps {
   user: User;
@@ -14,9 +14,52 @@ interface LandlordMaintenanceProps {
 const LandlordMaintenance: React.FC<LandlordMaintenanceProps> = ({ user }) => {
   const [view, setView] = useState<"incidents" | "predictive">("incidents");
   const [selectedProperty, setSelectedProperty] = useState<string>("all");
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [isLoadingIncidents, setIsLoadingIncidents] = useState(false);
 
   const properties = mockProperties.filter((p) => p.landlordId === user.id);
-  const incidents = mockIncidents.filter((i) =>
+
+  // Load incidents from backend
+  useEffect(() => {
+    const loadIncidents = async () => {
+      setIsLoadingIncidents(true);
+      try {
+        const response = await apiService.getAllIncidents(
+          selectedProperty === "all" ? undefined : selectedProperty,
+          user.id
+        );
+        
+        // Convert API response to Incident format
+        const loadedIncidents: Incident[] = response.incidents.map((inc: any) => ({
+          id: inc.id,
+          propertyId: inc.property_id,
+          assetId: inc.asset_id,
+          stayId: inc.stay_id,
+          conversationId: inc.conversation_id,
+          severity: inc.severity,
+          status: inc.status,
+          category: inc.category as any,
+          description: inc.description,
+          createdAt: inc.created_at,
+          resolvedAt: inc.resolved_at,
+          source: inc.ai_suggested ? "AI_SUGGESTION" : "TENANT_MESSAGE",
+          aiSuggested: inc.ai_suggested || false,
+        }));
+        
+        setIncidents(loadedIncidents);
+      } catch (error) {
+        console.error("Failed to load incidents:", error);
+        setIncidents([]);
+      } finally {
+        setIsLoadingIncidents(false);
+      }
+    };
+
+    loadIncidents();
+  }, [selectedProperty, user.id]);
+
+  // Filter incidents by selected property
+  const filteredIncidents = incidents.filter((i) =>
     selectedProperty === "all"
       ? properties.some((p) => p.id === i.propertyId)
       : i.propertyId === selectedProperty
@@ -115,48 +158,58 @@ const LandlordMaintenance: React.FC<LandlordMaintenanceProps> = ({ user }) => {
                 <button className="btn-link btn-sm">Resolved</button>
               </div>
             </div>
-            <div className="incidents-table">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Property</th>
-                    <th>Description</th>
-                    <th>Category</th>
-                    <th>Severity</th>
-                    <th>Status</th>
-                    <th>Created</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {incidents.map((incident) => (
-                    <tr key={incident.id}>
-                      <td>{getPropertyName(incident.propertyId)}</td>
-                      <td>{incident.description}</td>
-                      <td>{incident.category}</td>
-                      <td>
-                        <span
-                          className={`severity-badge ${getSeverityColor(incident.severity)}`}
-                        >
-                          {incident.severity}
-                        </span>
-                      </td>
-                      <td>
-                        <span
-                          className={`status-badge ${getStatusColor(incident.status)}`}
-                        >
-                          {incident.status}
-                        </span>
-                      </td>
-                      <td>{new Date(incident.createdAt).toLocaleDateString()}</td>
-                      <td>
-                        <button className="btn-link btn-sm">View</button>
-                      </td>
+            {isLoadingIncidents ? (
+              <div className="empty-state">
+                <p>Loading incidents...</p>
+              </div>
+            ) : filteredIncidents.length === 0 ? (
+              <div className="empty-state">
+                <p>No incidents found. All clear!</p>
+              </div>
+            ) : (
+              <div className="incidents-table">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Property</th>
+                      <th>Description</th>
+                      <th>Category</th>
+                      <th>Severity</th>
+                      <th>Status</th>
+                      <th>Created</th>
+                      <th>Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filteredIncidents.map((incident) => (
+                      <tr key={incident.id}>
+                        <td>{getPropertyName(incident.propertyId)}</td>
+                        <td>{incident.description}</td>
+                        <td>{incident.category}</td>
+                        <td>
+                          <span
+                            className={`severity-badge ${getSeverityColor(incident.severity)}`}
+                          >
+                            {incident.severity}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            className={`status-badge ${getStatusColor(incident.status)}`}
+                          >
+                            {incident.status}
+                          </span>
+                        </td>
+                        <td>{new Date(incident.createdAt).toLocaleDateString()}</td>
+                        <td>
+                          <button className="btn-link btn-sm">View</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -217,4 +270,3 @@ const LandlordMaintenance: React.FC<LandlordMaintenanceProps> = ({ user }) => {
 };
 
 export default LandlordMaintenance;
-

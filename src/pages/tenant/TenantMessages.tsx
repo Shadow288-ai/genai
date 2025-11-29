@@ -1,12 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import type { User, Message } from "../../types";
 import {
   mockConversations,
-  getMessagesByConversation,
   mockProperties,
 } from "../../services/mockData";
 import ChatInterface from "../../components/chat/ChatInterface";
+import { apiService } from "../../services/api";
 
 interface TenantMessagesProps {
   user: User;
@@ -17,27 +17,57 @@ const TenantMessages: React.FC<TenantMessagesProps> = ({ user }) => {
   const [selectedConversation, setSelectedConversation] = useState<string | null>(
     conversationId || null
   );
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  
   const conversations = mockConversations.filter((c) => c.tenantId === user.id);
 
   const conversation = selectedConversation
     ? conversations.find((c) => c.id === selectedConversation)
     : conversations[0];
-
-  // Initialize messages from mock data, but allow updates
-  const initialMessages = conversation ? getMessagesByConversation(conversation.id) : [];
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
   
   const property = conversation
     ? mockProperties.find((p) => p.id === conversation.propertyId)
     : null;
 
-  // Update messages when conversation changes
-  React.useEffect(() => {
-    if (conversation) {
-      const newMessages = getMessagesByConversation(conversation.id);
-      setMessages(newMessages);
-    }
-  }, [conversation?.id]);
+  // Load messages from backend when conversation changes
+  useEffect(() => {
+    const loadMessages = async () => {
+      if (!conversation) {
+        setMessages([]);
+        return;
+      }
+
+      setIsLoadingMessages(true);
+      try {
+        const response = await apiService.getConversation(conversation.id);
+        // Convert API response to Message format
+        const loadedMessages: Message[] = response.messages.map((msg: any) => ({
+          id: msg.id || `msg-${Date.now()}-${Math.random()}`,
+          conversationId: conversation.id,
+          senderId: msg.senderId || (msg.role === "assistant" ? "ai-assistant" : user.id),
+          senderType: msg.senderType || (msg.role === "assistant" ? "AI" : user.role),
+          content: msg.content,
+          timestamp: msg.timestamp || new Date().toISOString(),
+          metadata: msg.metadata || {},
+        }));
+        
+        // Sort by timestamp
+        loadedMessages.sort((a, b) => 
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+        
+        setMessages(loadedMessages);
+      } catch (error) {
+        console.error("Failed to load messages:", error);
+        setMessages([]);
+      } finally {
+        setIsLoadingMessages(false);
+      }
+    };
+
+    loadMessages();
+  }, [conversation?.id, user.id, user.role]);
 
   const handleSendMessage = (content: string) => {
     // Add user message optimistically
@@ -104,16 +134,22 @@ const TenantMessages: React.FC<TenantMessagesProps> = ({ user }) => {
 
         <div className="chat-main">
           {conversation && property ? (
-            <ChatInterface
-              conversation={conversation}
-              messages={messages}
-              property={property}
-              currentUser={user}
-              onSendMessage={handleSendMessage}
-              onAskAI={handleAskAI}
-              onNewMessage={handleNewMessage}
-              onIncidentCreated={handleIncidentCreated}
-            />
+            isLoadingMessages ? (
+              <div className="empty-chat">
+                <p>Loading messages...</p>
+              </div>
+            ) : (
+              <ChatInterface
+                conversation={conversation}
+                messages={messages}
+                property={property}
+                currentUser={user}
+                onSendMessage={handleSendMessage}
+                onAskAI={handleAskAI}
+                onNewMessage={handleNewMessage}
+                onIncidentCreated={handleIncidentCreated}
+              />
+            )
           ) : (
             <div className="empty-chat">
               <p>Select a conversation to start chatting</p>

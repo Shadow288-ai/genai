@@ -43,6 +43,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       onSendMessage(userMessage);
 
       try {
+        console.log("Sending message to API:", {
+          conversation_id: conversation.id,
+          property_id: property.id,
+          message: userMessage,
+          user_id: currentUser.id,
+          user_role: currentUser.role,
+        });
+
         // Call backend API
         const response = await apiService.sendChatMessage({
           conversation_id: conversation.id,
@@ -52,8 +60,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           user_role: currentUser.role,
         });
 
+        console.log("Received API response:", response);
+
         // Add AI response to messages
-        if (onNewMessage) {
+        if (onNewMessage && response.response) {
           const aiMessage: Message = {
             id: `msg-${Date.now()}`,
             conversationId: conversation.id,
@@ -72,6 +82,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           if (response.incident_created && response.incident_id && onIncidentCreated) {
             onIncidentCreated(response.incident_id);
           }
+        } else {
+          console.warn("No response from API or onNewMessage not provided");
         }
       } catch (error) {
         console.error("Failed to send message:", error);
@@ -82,7 +94,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             conversationId: conversation.id,
             senderId: "ai-assistant",
             senderType: "AI",
-            content: "Sorry, I'm having trouble connecting to the server. Please try again or contact your landlord directly.",
+            content: `Sorry, I'm having trouble connecting to the server. Error: ${error instanceof Error ? error.message : 'Unknown error'}. Please check that the backend is running on http://localhost:8000 or contact your landlord directly.`,
             timestamp: new Date().toISOString(),
           };
           onNewMessage(errorMessage);

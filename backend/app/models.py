@@ -54,3 +54,29 @@ class HealthResponse(BaseModel):
     ollama_connected: bool
     vector_store_ready: bool
 
+class CalendarEventRequest(BaseModel):
+    property_id: str
+    type: Literal["STAY", "MAINTENANCE", "CHECK_WINDOW"]
+    title: str
+    start_time: str
+    end_time: str
+    status: Literal["confirmed", "proposed", "cancelled"] = "confirmed"
+    tenant_id: Optional[str] = None
+    asset_id: Optional[str] = None
+    incident_id: Optional[str] = None
+    description: Optional[str] = None
+
+class CalendarEventResponse(BaseModel):
+    id: str
+    property_id: str
+    type: str
+    title: str
+    start_time: str
+    end_time: str
+    status: str
+    tenant_id: Optional[str] = None
+    asset_id: Optional[str] = None
+    incident_id: Optional[str] = None
+    description: Optional[str] = None
+    is_ai_suggested: Optional[bool] = False
+

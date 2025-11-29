@@ -8,13 +8,13 @@ from pathlib import Path
 from langchain_community.llms import Ollama
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.chains import RetrievalQA
-from langchain.prompts import PromptTemplate
-from langchain.schema import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
 
 class RAGService:
-    def __init__(self, model_name: str = "llama3", embedding_model: str = "all-MiniLM-L6-v2"):
+    def __init__(self, model_name: str = "mistral", embedding_model: str = "all-MiniLM-L6-v2"):
         """
         Initialize RAG service with Ollama LLM and sentence-transformers embeddings
         
@@ -98,7 +98,7 @@ class RAGService:
         except Exception as e:
             print(f"Error creating vector store: {e}")
     
-    def query(self, property_id: str, question: str, top_k: int = 5) -> Tuple[str, List[str]]:
+    def query(self, property_id: str, question: str, top_k: int = 8) -> Tuple[str, List[str]]:
         """
         Query RAG system for a property with intelligent fallback
         
@@ -119,36 +119,60 @@ class RAGService:
             # No vector store - try common knowledge
             return self._answer_with_common_knowledge(question)
         
-        # Create retriever
+        # Create retriever with similarity search
+        # Increase k to get more context
         retriever = vectorstore.as_retriever(search_kwargs={"k": top_k})
         
         # Retrieve relevant chunks
         try:
-            docs = retriever.get_relevant_documents(question)
+            # Use invoke for newer LangChain versions, fallback to get_relevant_documents
+            try:
+                docs = retriever.invoke(question)
+            except AttributeError:
+                docs = retriever.get_relevant_documents(question)
+            
             context_chunks = [doc.page_content for doc in docs]
             context_text = "\n\n---\n\n".join(context_chunks)
             
-            # Check if we have relevant context
-            has_relevant_context = len(context_chunks) > 0 and len(context_text.strip()) > 50
+            # Debug: print what we retrieved (only in verbose mode)
+            # print(f"DEBUG: Retrieved {len(context_chunks)} chunks for question: '{question}'")
+            # if context_chunks:
+            #     print(f"DEBUG: First chunk preview: {context_chunks[0][:150]}...")
             
-            if has_relevant_context:
+            # Check if we have relevant context - be more lenient
+            has_relevant_context = len(context_chunks) > 0 and len(context_text.strip()) > 20
+            
+            # Also check if any chunk contains keywords from the question
+            question_lower = question.lower()
+            question_keywords = [w for w in question_lower.split() if len(w) > 3]  # Words longer than 3 chars
+            has_keyword_match = any(
+                any(keyword in chunk.lower() for keyword in question_keywords)
+                for chunk in context_chunks
+            )
+            
+            if has_relevant_context or has_keyword_match:
                 # Use RAG with property-specific context
                 prompt_template = PromptTemplate(
                     input_variables=["context", "question"],
-                    template="""You are a helpful property assistant. Answer the question using ONLY the context provided below from the house manual.
+                    template="""You are a helpful property assistant. Answer the question using the context provided below from the house manual.
 
-If the answer is clearly in the context, provide a detailed, helpful answer.
-
-If the answer is partially in the context, use what's there and supplement with general knowledge only if necessary.
+IMPORTANT: The context below contains information from the house manual for this specific property. Use this information to answer the question.
 
 Context from house manual:
 {context}
 
 Question: {question}
 
-Provide a clear, helpful answer. If you're not certain, say so and offer to help further."""
+Instructions:
+1. If the answer is clearly in the context above, provide a detailed, step-by-step answer using that information.
+2. If the answer is partially in the context, use what's there and be specific about what you know from the manual.
+3. Be helpful and clear. Reference specific details from the context when possible.
+4. If the context doesn't contain the answer, say so and offer to help further.
+
+Your answer:"""
                 )
                 
+                # Format prompt directly (simpler and more reliable)
                 prompt = prompt_template.format(context=context_text, question=question)
                 answer = self.llm.invoke(prompt)
                 

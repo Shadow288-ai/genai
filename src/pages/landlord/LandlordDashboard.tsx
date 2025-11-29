@@ -1,28 +1,62 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import type { User } from "../../types";
+import type { User, Incident } from "../../types";
 import {
   mockProperties,
-  mockIncidents,
   mockRiskScores,
   mockCalendarEvents,
 } from "../../services/mockData";
+import { apiService } from "../../services/api";
 
 interface LandlordDashboardProps {
   user: User;
 }
 
-const LandlordDashboard: React.FC<LandlordDashboardProps> = () => {
+const LandlordDashboard: React.FC<LandlordDashboardProps> = ({ user }) => {
   const navigate = useNavigate();
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Load incidents from backend
+  useEffect(() => {
+    const loadIncidents = async () => {
+      try {
+        const response = await apiService.getAllIncidents(undefined, user.id);
+        const loadedIncidents: Incident[] = response.incidents.map((inc: any) => ({
+          id: inc.id,
+          propertyId: inc.property_id,
+          assetId: inc.asset_id,
+          stayId: inc.stay_id,
+          conversationId: inc.conversation_id,
+          severity: inc.severity,
+          status: inc.status,
+          category: inc.category as any,
+          description: inc.description,
+          createdAt: inc.created_at,
+          resolvedAt: inc.resolved_at,
+          source: inc.ai_suggested ? "AI_SUGGESTION" : "TENANT_MESSAGE",
+          aiSuggested: inc.ai_suggested || false,
+        }));
+        setIncidents(loadedIncidents);
+      } catch (error) {
+        console.error("Failed to load incidents:", error);
+        setIncidents([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadIncidents();
+  }, [user.id]);
 
   const totalProperties = mockProperties.length;
-  const openIncidents = mockIncidents.filter((i) => i.status !== "resolved").length;
+  const openIncidents = incidents.filter((i) => i.status !== "resolved").length;
   const highRiskAssets = mockRiskScores.filter((r) => r.score >= 70).length;
   const upcomingEvents = mockCalendarEvents.filter(
     (e) => new Date(e.startTime) >= new Date() && e.status === "confirmed"
   ).length;
 
-  const recentIncidents = mockIncidents
+  const recentIncidents = incidents
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 5);
 
@@ -96,7 +130,9 @@ const LandlordDashboard: React.FC<LandlordDashboardProps> = () => {
             </button>
           </div>
           <div className="incidents-list">
-            {recentIncidents.length === 0 ? (
+            {isLoading ? (
+              <p className="text-muted">Loading incidents...</p>
+            ) : recentIncidents.length === 0 ? (
               <p className="text-muted">No recent incidents</p>
             ) : (
               recentIncidents.map((incident) => (
@@ -154,4 +190,3 @@ const LandlordDashboard: React.FC<LandlordDashboardProps> = () => {
 };
 
 export default LandlordDashboard;
-

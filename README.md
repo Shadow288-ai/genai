@@ -35,6 +35,10 @@ A comprehensive tenant-landlord communication app with AI-powered property assis
 2. **Python 3.10+**
 3. **Ollama** installed and running
 
+> **📖 New to Ollama?** See [INSTALL_OLLAMA.md](./INSTALL_OLLAMA.md) for detailed installation instructions.
+> 
+> **🚀 Quick setup?** See [QUICK_START.md](./QUICK_START.md) for step-by-step guide.
+
 ### 1. Install Ollama
 
 Download from https://ollama.com and install.
