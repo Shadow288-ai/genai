@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useParams } from "react-router-dom";
-import type { User } from "../../types";
+import type { User, Message } from "../../types";
 import {
   mockConversations,
   getMessagesByConversation,
@@ -23,20 +23,47 @@ const TenantMessages: React.FC<TenantMessagesProps> = ({ user }) => {
     ? conversations.find((c) => c.id === selectedConversation)
     : conversations[0];
 
-  const messages = conversation ? getMessagesByConversation(conversation.id) : [];
+  // Initialize messages from mock data, but allow updates
+  const initialMessages = conversation ? getMessagesByConversation(conversation.id) : [];
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  
   const property = conversation
     ? mockProperties.find((p) => p.id === conversation.propertyId)
     : null;
 
+  // Update messages when conversation changes
+  React.useEffect(() => {
+    if (conversation) {
+      const newMessages = getMessagesByConversation(conversation.id);
+      setMessages(newMessages);
+    }
+  }, [conversation?.id]);
+
   const handleSendMessage = (content: string) => {
-    // In production, this would be an API call
-    console.log("Sending message:", content);
-    // For now, we'll just log it - in real app, this would update state/API
+    // Add user message optimistically
+    const userMessage: Message = {
+      id: `msg-${Date.now()}`,
+      conversationId: conversation!.id,
+      senderId: user.id,
+      senderType: user.role,
+      content: content,
+      timestamp: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, userMessage]);
+  };
+
+  const handleNewMessage = (message: Message) => {
+    setMessages((prev) => [...prev, message]);
+  };
+
+  const handleIncidentCreated = (incidentId: string) => {
+    console.log("Incident created:", incidentId);
+    // Could show a notification or update UI
   };
 
   const handleAskAI = (question: string) => {
-    // In production, this would call the AI service
-    console.log("Asking AI:", question);
+    // This is now handled by ChatInterface directly via API
+    console.log("AI question:", question);
   };
 
   return (
@@ -84,6 +111,8 @@ const TenantMessages: React.FC<TenantMessagesProps> = ({ user }) => {
               currentUser={user}
               onSendMessage={handleSendMessage}
               onAskAI={handleAskAI}
+              onNewMessage={handleNewMessage}
+              onIncidentCreated={handleIncidentCreated}
             />
           ) : (
             <div className="empty-chat">
@@ -97,4 +126,3 @@ const TenantMessages: React.FC<TenantMessagesProps> = ({ user }) => {
 };
 
 export default TenantMessages;
-

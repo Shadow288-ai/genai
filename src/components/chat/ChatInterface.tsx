@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import type { User, Message, Conversation, Property } from "../../types";
+import { apiService } from "../../services/api";
 
 interface ChatInterfaceProps {
   conversation: Conversation;
@@ -8,34 +9,145 @@ interface ChatInterfaceProps {
   currentUser: User;
   onSendMessage: (content: string) => void;
   onAskAI: (question: string) => void;
+  onNewMessage?: (message: Message) => void;
+  onIncidentCreated?: (incidentId: string) => void;
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
+  conversation,
   messages,
   property,
   currentUser,
   onSendMessage,
   onAskAI,
+  onNewMessage,
+  onIncidentCreated,
 }) => {
   const [inputValue, setInputValue] = useState("");
   const [showAIPanel, setShowAIPanel] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (inputValue.trim()) {
-      onSendMessage(inputValue);
+    if (inputValue.trim() && !isLoading) {
+      const userMessage = inputValue;
       setInputValue("");
+      setIsLoading(true);
+
+      // Call the callback immediately for optimistic UI
+      onSendMessage(userMessage);
+
+      try {
+        // Call backend API
+        const response = await apiService.sendChatMessage({
+          conversation_id: conversation.id,
+          property_id: property.id,
+          message: userMessage,
+          user_id: currentUser.id,
+          user_role: currentUser.role,
+        });
+
+        // Add AI response to messages
+        if (onNewMessage) {
+          const aiMessage: Message = {
+            id: `msg-${Date.now()}`,
+            conversationId: conversation.id,
+            senderId: "ai-assistant",
+            senderType: "AI",
+            content: response.response,
+            timestamp: new Date().toISOString(),
+            metadata: {
+              incidentId: response.incident_id,
+              isAISuggestion: true,
+            },
+          };
+          onNewMessage(aiMessage);
+
+          // Notify about incident if created
+          if (response.incident_created && response.incident_id && onIncidentCreated) {
+            onIncidentCreated(response.incident_id);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to send message:", error);
+        // Show error message
+        if (onNewMessage) {
+          const errorMessage: Message = {
+            id: `msg-error-${Date.now()}`,
+            conversationId: conversation.id,
+            senderId: "ai-assistant",
+            senderType: "AI",
+            content: "Sorry, I'm having trouble connecting to the server. Please try again or contact your landlord directly.",
+            timestamp: new Date().toISOString(),
+          };
+          onNewMessage(errorMessage);
+        }
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
-  const handleAskAI = (question: string) => {
-    onAskAI(question);
+  const handleAskAI = async (question: string) => {
+    if (isLoading) return;
+    
     setShowAIPanel(false);
+    setIsLoading(true);
+
+    try {
+      // Call RAG API directly
+      const response = await apiService.queryRAG({
+        property_id: property.id,
+        question: question,
+        user_role: currentUser.role,
+      });
+
+      // Add user question and AI answer
+      if (onNewMessage) {
+        const userMsg: Message = {
+          id: `msg-${Date.now()}-user`,
+          conversationId: conversation.id,
+          senderId: currentUser.id,
+          senderType: currentUser.role,
+          content: question,
+          timestamp: new Date().toISOString(),
+        };
+        onNewMessage(userMsg);
+
+        const aiMsg: Message = {
+          id: `msg-${Date.now()}-ai`,
+          conversationId: conversation.id,
+          senderId: "ai-assistant",
+          senderType: "AI",
+          content: response.answer,
+          timestamp: new Date().toISOString(),
+          metadata: {
+            isAISuggestion: true,
+          },
+        };
+        onNewMessage(aiMsg);
+      }
+    } catch (error) {
+      console.error("Failed to query AI:", error);
+      if (onNewMessage) {
+        const errorMessage: Message = {
+          id: `msg-error-${Date.now()}`,
+          conversationId: conversation.id,
+          senderId: "ai-assistant",
+          senderType: "AI",
+          content: "Sorry, I'm having trouble connecting to the AI service. Please try again later.",
+          timestamp: new Date().toISOString(),
+        };
+        onNewMessage(errorMessage);
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const formatTime = (timestamp: string) => {
@@ -59,7 +171,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   const isCurrentUser = (message: Message) => {
-    return message.senderId === currentUser.id;
+    return message.senderId === currentUser.id && message.senderType !== "AI";
   };
 
   return (
@@ -72,6 +184,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         <button
           className="btn-secondary btn-sm"
           onClick={() => setShowAIPanel(!showAIPanel)}
+          disabled={isLoading}
         >
           {showAIPanel ? "Hide" : "Ask"} AI Assistant
         </button>
@@ -85,24 +198,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <button
               className="btn-link"
               onClick={() => handleAskAI("How does the TV work?")}
+              disabled={isLoading}
             >
               How does the TV work?
             </button>
             <button
               className="btn-link"
               onClick={() => handleAskAI("Where are the spare keys?")}
+              disabled={isLoading}
             >
               Where are the spare keys?
             </button>
             <button
               className="btn-link"
               onClick={() => handleAskAI("How to reset the Wi-Fi router?")}
+              disabled={isLoading}
             >
               How to reset the Wi-Fi router?
             </button>
             <button
               className="btn-link"
               onClick={() => handleAskAI("Where are the forks?")}
+              disabled={isLoading}
             >
               Where are the forks?
             </button>
@@ -133,6 +250,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
           </div>
         ))}
+        {isLoading && (
+          <div className="message ai">
+            <div className="message-avatar">🤖</div>
+            <div className="message-content">
+              <div className="message-body">Thinking...</div>
+            </div>
+          </div>
+        )}
         <div ref={messagesEndRef} />
       </div>
 
@@ -140,12 +265,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         <input
           type="text"
           className="chat-input"
-          placeholder="Type a message..."
+          placeholder={isLoading ? "AI is thinking..." : "Type a message..."}
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
+          disabled={isLoading}
         />
-        <button type="submit" className="btn-primary btn-send">
-          Send
+        <button type="submit" className="btn-primary btn-send" disabled={isLoading || !inputValue.trim()}>
+          {isLoading ? "..." : "Send"}
         </button>
       </form>
     </div>
@@ -153,4 +279,3 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 };
 
 export default ChatInterface;
-

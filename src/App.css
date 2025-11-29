@@ -976,6 +976,27 @@
   transform: translateX(24px);
 }
 
+/* Suggestion panels */
+.suggestion-panel {
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--primary-light);
+  border-bottom: 1px solid var(--border-light);
+  border-left: 3px solid var(--primary);
+}
+
+.suggestion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+.suggestion-panel p {
+  margin: var(--spacing-sm) 0;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .messages-layout {

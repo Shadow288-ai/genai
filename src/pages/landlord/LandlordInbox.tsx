@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import { useParams } from "react-router-dom";
-import type { User } from "../../types";
+import type { User, Message } from "../../types";
 import {
   mockConversations,
   getMessagesByConversation,
   mockProperties,
 } from "../../services/mockData";
 import ChatInterface from "../../components/chat/ChatInterface";
+import { apiService } from "../../services/api";
 
 interface LandlordInboxProps {
   user: User;
@@ -23,27 +24,110 @@ const LandlordInbox: React.FC<LandlordInboxProps> = ({ user }) => {
     ? conversations.find((c) => c.id === selectedConversation)
     : conversations[0];
 
-  const messages = conversation ? getMessagesByConversation(conversation.id) : [];
+  // Initialize messages from mock data, but allow updates
+  const initialMessages = conversation ? getMessagesByConversation(conversation.id) : [];
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [suggestedReply, setSuggestedReply] = useState<string | null>(null);
+  const [summary, setSummary] = useState<string | null>(null);
+  
   const property = conversation
     ? mockProperties.find((p) => p.id === conversation.propertyId)
     : null;
 
+  // Update messages when conversation changes
+  React.useEffect(() => {
+    if (conversation) {
+      const newMessages = getMessagesByConversation(conversation.id);
+      setMessages(newMessages);
+      setSuggestedReply(null);
+      setSummary(null);
+    }
+  }, [conversation?.id]);
+
   const handleSendMessage = (content: string) => {
-    console.log("Sending message:", content);
+    // Add user message optimistically
+    const userMessage: Message = {
+      id: `msg-${Date.now()}`,
+      conversationId: conversation!.id,
+      senderId: user.id,
+      senderType: user.role,
+      content: content,
+      timestamp: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, userMessage]);
+  };
+
+  const handleNewMessage = (message: Message) => {
+    setMessages((prev) => [...prev, message]);
+  };
+
+  const handleIncidentCreated = (incidentId: string) => {
+    console.log("Incident created:", incidentId);
   };
 
   const handleAskAI = (question: string) => {
-    console.log("Asking AI:", question);
+    console.log("AI question:", question);
   };
 
-  const handleSuggestReply = () => {
-    // In production, this would call AI service
-    console.log("Generating reply suggestion");
+  const handleSuggestReply = async () => {
+    if (!conversation) return;
+    
+    try {
+      // Convert messages to API format
+      const context = messages.map((msg) => ({
+        role: msg.senderType === "AI" ? "assistant" : msg.senderType === "LANDLORD" ? "user" : "user",
+        content: msg.content,
+        timestamp: msg.timestamp,
+      }));
+
+      const response = await apiService.suggestReply({
+        conversation_id: conversation.id,
+        context: context,
+      });
+
+      setSuggestedReply(response.suggestion);
+    } catch (error) {
+      console.error("Failed to generate reply suggestion:", error);
+      setSuggestedReply("Sorry, I couldn't generate a reply suggestion. Please try again.");
+    }
   };
 
-  const handleSummarize = () => {
-    // In production, this would call AI service
-    console.log("Generating summary");
+  const handleSummarize = async () => {
+    if (!conversation) return;
+    
+    try {
+      // Use the suggest reply endpoint with a summarize prompt
+      const context = messages.map((msg) => ({
+        role: msg.senderType === "AI" ? "assistant" : msg.senderType === "LANDLORD" ? "user" : "user",
+        content: msg.content,
+        timestamp: msg.timestamp,
+      }));
+
+      // For now, we'll use the suggest reply with a custom prompt
+      // In production, you'd have a dedicated summarize endpoint
+      const response = await apiService.suggestReply({
+        conversation_id: conversation.id,
+        context: [
+          {
+            role: "system",
+            content: "Summarize this conversation in 2-3 sentences, highlighting key issues and actions needed.",
+          },
+          ...context,
+        ],
+      });
+
+      setSummary(response.suggestion);
+    } catch (error) {
+      console.error("Failed to generate summary:", error);
+      setSummary("Sorry, I couldn't generate a summary. Please try again.");
+    }
+  };
+
+  const useSuggestedReply = () => {
+    if (suggestedReply) {
+      handleSendMessage(suggestedReply);
+      setSuggestedReply(null);
+    }
   };
 
   return (
@@ -98,6 +182,34 @@ const LandlordInbox: React.FC<LandlordInboxProps> = ({ user }) => {
                   📝 Summarize Thread
                 </button>
               </div>
+              
+              {suggestedReply && (
+                <div className="suggestion-panel">
+                  <div className="suggestion-header">
+                    <strong>Suggested Reply:</strong>
+                    <button className="btn-link btn-sm" onClick={() => setSuggestedReply(null)}>
+                      ✕
+                    </button>
+                  </div>
+                  <p>{suggestedReply}</p>
+                  <button className="btn-primary btn-sm" onClick={useSuggestedReply}>
+                    Use This Reply
+                  </button>
+                </div>
+              )}
+
+              {summary && (
+                <div className="suggestion-panel">
+                  <div className="suggestion-header">
+                    <strong>Conversation Summary:</strong>
+                    <button className="btn-link btn-sm" onClick={() => setSummary(null)}>
+                      ✕
+                    </button>
+                  </div>
+                  <p>{summary}</p>
+                </div>
+              )}
+
               <ChatInterface
                 conversation={conversation}
                 messages={messages}
@@ -105,6 +217,8 @@ const LandlordInbox: React.FC<LandlordInboxProps> = ({ user }) => {
                 currentUser={user}
                 onSendMessage={handleSendMessage}
                 onAskAI={handleAskAI}
+                onNewMessage={handleNewMessage}
+                onIncidentCreated={handleIncidentCreated}
               />
             </div>
           ) : (
@@ -119,4 +233,3 @@ const LandlordInbox: React.FC<LandlordInboxProps> = ({ user }) => {
 };
 
 export default LandlordInbox;
-
