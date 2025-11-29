@@ -6,6 +6,7 @@ import {
   getAssetsByProperty,
 } from "../../services/mockData";
 import { apiService } from "../../services/api";
+import IncidentDetailModal from "../../components/incidents/IncidentDetailModal";
 
 interface LandlordMaintenanceProps {
   user: User;
@@ -16,6 +17,7 @@ const LandlordMaintenance: React.FC<LandlordMaintenanceProps> = ({ user }) => {
   const [selectedProperty, setSelectedProperty] = useState<string>("all");
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [isLoadingIncidents, setIsLoadingIncidents] = useState(false);
+  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
 
   const properties = mockProperties.filter((p) => p.landlordId === user.id);
 
@@ -202,7 +204,12 @@ const LandlordMaintenance: React.FC<LandlordMaintenanceProps> = ({ user }) => {
                         </td>
                         <td>{new Date(incident.createdAt).toLocaleDateString()}</td>
                         <td>
-                          <button className="btn-link btn-sm">View</button>
+                          <button 
+                            className="btn-link btn-sm"
+                            onClick={() => setSelectedIncident(incident)}
+                          >
+                            View
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -264,6 +271,45 @@ const LandlordMaintenance: React.FC<LandlordMaintenanceProps> = ({ user }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {selectedIncident && (
+        <IncidentDetailModal
+          incident={selectedIncident}
+          onClose={() => setSelectedIncident(null)}
+          onScheduleVisit={async (incidentId, startTime, endTime, description) => {
+            try {
+              const property = mockProperties.find(
+                (p) => p.id === selectedIncident.propertyId
+              );
+              
+              await apiService.createCalendarEvent({
+                property_id: selectedIncident.propertyId,
+                type: "MAINTENANCE",
+                title: `Maintenance: ${selectedIncident.category} - ${property?.name || "Property"}`,
+                start_time: startTime,
+                end_time: endTime,
+                status: "confirmed",
+                incident_id: incidentId,
+                description: description || selectedIncident.description,
+              });
+
+              // Update incident status locally
+              setIncidents((prev) =>
+                prev.map((inc) =>
+                  inc.id === incidentId
+                    ? { ...inc, status: "scheduled" as any }
+                    : inc
+                )
+              );
+
+              alert("Visit scheduled successfully! Check the Calendar tab to see it.");
+            } catch (error) {
+              console.error("Failed to schedule visit:", error);
+              alert("Failed to schedule visit. Please try again.");
+            }
+          }}
+        />
       )}
     </div>
   );

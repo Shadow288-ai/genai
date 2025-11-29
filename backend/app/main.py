@@ -14,7 +14,9 @@ from app.models import (
     RAGQueryRequest, RAGQueryResponse,
     IssueTriageRequest, IssueTriageResponse,
     ReplySuggestionRequest, ReplySuggestionResponse,
-    HealthResponse
+    HealthResponse,
+    CalendarEventRequest,
+    CalendarEventResponse,
 )
 from app.rag_service import RAGService
 

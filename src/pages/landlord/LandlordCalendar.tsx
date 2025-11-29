@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import type { User, CalendarEvent } from "../../types";
 import {
-  mockCalendarEvents,
   mockProperties,
 } from "../../services/mockData";
+import { apiService } from "../../services/api";
+import CalendarEventDetailModal from "../../components/calendar/CalendarEventDetailModal";
 
 interface LandlordCalendarProps {
   user: User;
@@ -12,10 +13,50 @@ interface LandlordCalendarProps {
 const LandlordCalendar: React.FC<LandlordCalendarProps> = ({ user }) => {
   const [view, setView] = useState<"month" | "week" | "list">("month");
   const [selectedProperty, setSelectedProperty] = useState<string>("all");
-  const [selectedDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [selectedDayEvents, setSelectedDayEvents] = useState<CalendarEvent[] | null>(null);
 
   const properties = mockProperties.filter((p) => p.landlordId === user.id);
-  const allEvents = mockCalendarEvents.filter((e) =>
+
+  // Load calendar events from backend
+  useEffect(() => {
+    const loadEvents = async () => {
+      setIsLoading(true);
+      try {
+        const propertyId = selectedProperty === "all" ? undefined : selectedProperty;
+        const response = await apiService.getAllCalendarEvents(propertyId);
+        
+        // Convert API response to CalendarEvent format
+        const loadedEvents: CalendarEvent[] = response.events.map((e: any) => ({
+          id: e.id,
+          propertyId: e.property_id,
+          type: e.type as any,
+          title: e.title,
+          startTime: e.start_time,
+          endTime: e.end_time,
+          status: e.status as any,
+          tenantId: e.tenant_id,
+          assetId: e.asset_id,
+          incidentId: e.incident_id,
+          isAISuggested: e.is_ai_suggested || false,
+          description: e.description,
+        }));
+        
+        setEvents(loadedEvents);
+      } catch (error) {
+        console.error("Failed to load calendar events:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadEvents();
+  }, [selectedProperty]);
+
+  const allEvents = events.filter((e) =>
     selectedProperty === "all"
       ? properties.some((p) => p.id === e.propertyId)
       : e.propertyId === selectedProperty
@@ -55,6 +96,35 @@ const LandlordCalendar: React.FC<LandlordCalendarProps> = ({ user }) => {
     acc[date].push(event);
     return acc;
   }, {} as Record<string, CalendarEvent[]>);
+
+  // Month navigation functions
+  const goToPreviousMonth = () => {
+    setSelectedDate((prev) => {
+      const newDate = new Date(prev);
+      newDate.setMonth(prev.getMonth() - 1);
+      return newDate;
+    });
+  };
+
+  const goToNextMonth = () => {
+    setSelectedDate((prev) => {
+      const newDate = new Date(prev);
+      newDate.setMonth(prev.getMonth() + 1);
+      return newDate;
+    });
+  };
+
+  const goToToday = () => {
+    setSelectedDate(new Date());
+  };
+
+  // Get month and year for display
+  const getMonthYear = () => {
+    return selectedDate.toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+    });
+  };
 
   return (
     <div className="page-container">
@@ -96,14 +166,28 @@ const LandlordCalendar: React.FC<LandlordCalendarProps> = ({ user }) => {
         </div>
       </div>
 
-      {view === "list" ? (
+      {isLoading ? (
+        <div className="empty-state">
+          <p>Loading calendar events...</p>
+        </div>
+      ) : view === "list" ? (
         <div className="calendar-list-view">
-          {allEvents
-            .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
-            .map((event) => {
+          {allEvents.length === 0 ? (
+            <div className="empty-state">
+              <p>No calendar events found.</p>
+            </div>
+          ) : (
+            allEvents
+              .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+              .map((event) => {
               const { date, time } = formatDateTime(event.startTime);
               return (
-                <div key={event.id} className="card calendar-event-card">
+                <div
+                  key={event.id}
+                  className="card calendar-event-card"
+                  style={{ cursor: "pointer" }}
+                  onClick={() => setSelectedEvent(event)}
+                >
                   <div className="event-icon">{getEventIcon(event)}</div>
                   <div className="event-content">
                     <div className="event-header">
@@ -125,17 +209,48 @@ const LandlordCalendar: React.FC<LandlordCalendarProps> = ({ user }) => {
                   <div className="event-actions">
                     {event.status === "proposed" && (
                       <>
-                        <button className="btn-primary btn-sm">Confirm</button>
-                        <button className="btn-secondary btn-sm">Modify</button>
+                        <button
+                          className="btn-primary btn-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // TODO: Implement confirm functionality
+                          }}
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          className="btn-secondary btn-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // TODO: Implement modify functionality
+                          }}
+                        >
+                          Modify
+                        </button>
                       </>
                     )}
                   </div>
                 </div>
               );
-            })}
+              })
+          )}
         </div>
       ) : (
         <div className="card card-large calendar-month-view">
+          <div className="calendar-month-header">
+            <div className="calendar-month-nav">
+              <button className="btn-link" onClick={goToPreviousMonth}>
+                ← Previous
+              </button>
+              <h3>{getMonthYear()}</h3>
+              <button className="btn-link" onClick={goToNextMonth}>
+                Next →
+              </button>
+            </div>
+            <button className="btn-secondary btn-sm" onClick={goToToday}>
+              Today
+            </button>
+          </div>
           <div className="calendar-grid">
             {/* Simplified month view - in production, use a proper calendar library */}
             <div className="calendar-header">
@@ -162,14 +277,40 @@ const LandlordCalendar: React.FC<LandlordCalendarProps> = ({ user }) => {
                       {dayEvents.slice(0, 3).map((event) => (
                         <div
                           key={event.id}
-                          className={`event-dot ${getEventColor(event)}`}
+                          className={`event-dot ${getEventColor(event)} clickable`}
                           title={event.title}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedEvent(event);
+                          }}
+                          style={{ cursor: "pointer" }}
                         />
                       ))}
                       {dayEvents.length > 3 && (
-                        <div className="event-dot more">+{dayEvents.length - 3}</div>
+                        <div
+                          className="event-dot more clickable"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedDayEvents(dayEvents);
+                          }}
+                          style={{ cursor: "pointer" }}
+                        >
+                          +{dayEvents.length - 3}
+                        </div>
                       )}
                     </div>
+                    {dayEvents.length > 0 && dayEvents.length <= 3 && (
+                      <div
+                        className="calendar-day-clickable"
+                        onClick={() => {
+                          if (dayEvents.length === 1) {
+                            setSelectedEvent(dayEvents[0]);
+                          } else {
+                            setSelectedDayEvents(dayEvents);
+                          }
+                        }}
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -195,6 +336,63 @@ const LandlordCalendar: React.FC<LandlordCalendarProps> = ({ user }) => {
           </div>
         </div>
       </div>
+
+      {selectedEvent && (
+        <CalendarEventDetailModal
+          event={selectedEvent}
+          onClose={() => setSelectedEvent(null)}
+        />
+      )}
+
+      {selectedDayEvents && selectedDayEvents.length > 1 && (
+        <div className="modal-overlay" onClick={() => setSelectedDayEvents(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Events on {new Date(selectedDayEvents[0].startTime).toLocaleDateString("en-US", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}</h2>
+              <button className="btn-link" onClick={() => setSelectedDayEvents(null)}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                {selectedDayEvents.map((event) => (
+                  <div
+                    key={event.id}
+                    className="card"
+                    style={{ cursor: "pointer", padding: "16px" }}
+                    onClick={() => {
+                      setSelectedDayEvents(null);
+                      setSelectedEvent(event);
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <span style={{ fontSize: "1.5rem" }}>{getEventIcon(event)}</span>
+                      <div style={{ flex: 1 }}>
+                        <h4 style={{ margin: "0 0 4px 0" }}>{event.title}</h4>
+                        <p className="text-muted" style={{ margin: 0, fontSize: "0.875rem" }}>
+                          {new Date(event.startTime).toLocaleTimeString("en-US", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })} - {new Date(event.endTime).toLocaleTimeString("en-US", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                      <span className={`status-badge ${event.status}`}>{event.status}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
