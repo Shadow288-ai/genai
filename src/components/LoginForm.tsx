@@ -6,54 +6,98 @@ interface LoginFormProps {
 }
 
 const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
-  const [email, setEmail] = useState<string>("admin@example.com");
-  const [password, setPassword] = useState<string>("admin123");
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
   const [error, setError] = useState<string>("");
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError("");
     const result = onLogin({ email, password });
     if (!result.success) {
       setError(result.message ?? "Login failed");
     }
   };
 
+  const handleQuickLogin = (userType: "landlord" | "tenant") => {
+    if (userType === "landlord") {
+      setEmail("landlord@example.com");
+      setPassword("admin123");
+    } else {
+      setEmail("tenant@example.com");
+      setPassword("admin123");
+    }
+  };
+
   return (
     <div className="auth-wrapper">
-      <form className="card" onSubmit={handleSubmit}>
-        <h1 className="card-title">Tenant Manager</h1>
-        <p className="card-subtitle">Please log in to continue</p>
+      <form className="card auth-card" onSubmit={handleSubmit}>
+        <div className="auth-header">
+          <h1 className="auth-logo">HomeGuard AI</h1>
+          <p className="auth-subtitle">Tenant-Landlord Communication Platform</p>
+        </div>
 
         {error && <div className="alert-error">{error}</div>}
 
-        <label className="form-label">
-          Email
-          <input
-            className="form-input"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="admin@example.com"
-          />
-        </label>
+        <div className="form-group">
+          <label className="form-label">
+            Email
+            <input
+              className="form-input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="your@email.com"
+              required
+            />
+          </label>
+        </div>
 
-        <label className="form-label">
-          Password
-          <input
-            className="form-input"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-          />
-        </label>
+        <div className="form-group">
+          <label className="form-label">
+            Password
+            <input
+              className="form-input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+            />
+          </label>
+        </div>
 
-        <button className="btn-primary" type="submit">
+        <button className="btn-primary btn-block" type="submit">
           Login
         </button>
 
+        <div className="auth-divider">
+          <span>Quick Login (Demo)</span>
+        </div>
+
+        <div className="quick-login-buttons">
+          <button
+            type="button"
+            className="btn-secondary btn-block"
+            onClick={() => handleQuickLogin("landlord")}
+          >
+            Login as Landlord
+          </button>
+          <button
+            type="button"
+            className="btn-secondary btn-block"
+            onClick={() => handleQuickLogin("tenant")}
+          >
+            Login as Tenant
+          </button>
+        </div>
+
         <p className="hint">
-          Demo login: <strong>admin@example.com / admin123</strong>
+          Demo credentials:
+          <br />
+          <strong>Landlord:</strong> landlord@example.com / admin123
+          <br />
+          <strong>Tenant:</strong> tenant@example.com / admin123
         </p>
       </form>
     </div>
