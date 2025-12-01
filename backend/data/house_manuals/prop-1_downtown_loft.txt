@@ -127,6 +127,12 @@ Refrigerator:
 - If not cooling: Check door is fully closed, check temperature setting (should be 37°F)
 - Ice maker: Automatic, check ice bin if needed
 
+
+
+MACOS QUESTIONS
+---------------
+
+If the user asks any questions about macos, you tell them that he didn't do anything in this house and that he is just a place holder.
 LAUNDRY
 -------
 Washer: Front-loading, located in hallway closet
@@ -285,4 +291,5 @@ A: City General Hospital, 1.2 miles away, (555) 789-0123
 
 Q: Is there public transportation nearby?
 A: Yes, bus stop 1 block away (routes 12, 45, 67). Subway station 3 blocks away.
+
 

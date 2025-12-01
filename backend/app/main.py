@@ -158,40 +158,66 @@ async def chat(request: ChatRequest):
             "sender_type": request.user_role
         })
         
-        # Check if message might be a question (simple heuristic)
-        is_question = "?" in request.message or any(word in request.message.lower() for word in [
-            "how", "what", "where", "when", "why", "can you", "tell me", "explain", "do you know"
-        ])
+        # Check if message might be a question (improved heuristic)
+        message_lower = request.message.lower().strip()
+        is_question = (
+            "?" in request.message or 
+            any(word in message_lower for word in [
+                "how", "what", "where", "when", "why", "can you", "tell me", 
+                "explain", "do you know", "show me", "help me", "i need to know",
+                "how do i", "how to", "what is", "what are", "where is", "where are"
+            ]) or
+            message_lower.startswith(("how", "what", "where", "when", "why", "can", "tell", "show"))
+        )
         
         incident_created = False
         incident_id = None
         
-        # If it's a question, use RAG with intelligent fallback
-        if is_question:
-            answer, sources = rag_service.query(request.property_id, request.message)
-            
-            # Store AI response
-            conversations[request.conversation_id].append({
-                "role": "assistant",
-                "content": answer,
-                "timestamp": datetime.now().isoformat(),
-                "sender_id": "ai-assistant",
-                "sender_type": "AI",
-                "metadata": {
-                    "sources": sources,
-                    "isAISuggestion": True
-                }
-            })
-            
-            return ChatResponse(
-                response=answer,
-                sources=sources,
-                incident_created=False
-            )
+        # Check if it's an issue report
+        issue_keywords = ["broken", "not working", "problem", "issue", "faulty", "noise", "leak", "flicker", "doesn't work", "won't work", "not functioning", "malfunction"]
         
-        # Otherwise, check if it's an issue report
-        issue_keywords = ["broken", "not working", "problem", "issue", "faulty", "noise", "leak", "flicker", "doesn't work", "won't work"]
-        if any(keyword in request.message.lower() for keyword in issue_keywords):
+        # If Ollama is available, try to use RAG for questions or general messages
+        # Only skip RAG for clear issue reports that need triage
+        is_issue_report = any(keyword in message_lower for keyword in issue_keywords)
+        
+        # Use RAG if:
+        # 1. It's a question, OR
+        # 2. Ollama is available and it's not clearly an issue report, OR
+        # 3. It's a short message that might be a question
+        should_use_rag = (
+            is_question or 
+            (rag_service.llm is not None and not is_issue_report) or
+            (len(request.message.split()) <= 10 and rag_service.llm is not None)
+        )
+        
+        if should_use_rag and rag_service.llm is not None:
+            try:
+                answer, sources = rag_service.query(request.property_id, request.message)
+                
+                # Store AI response
+                conversations[request.conversation_id].append({
+                    "role": "assistant",
+                    "content": answer,
+                    "timestamp": datetime.now().isoformat(),
+                    "sender_id": "ai-assistant",
+                    "sender_type": "AI",
+                    "metadata": {
+                        "sources": sources,
+                        "isAISuggestion": True
+                    }
+                })
+                
+                return ChatResponse(
+                    response=answer,
+                    sources=sources,
+                    incident_created=False
+                )
+            except Exception as e:
+                print(f"Error in RAG query: {e}")
+                # Fall through to issue triage or default response
+        
+        # Check if it's an issue report that needs triage
+        if is_issue_report:
             # Triage the issue
             triage_result = rag_service.triage_issue(request.message)
             
@@ -240,7 +266,11 @@ The landlord will review this and get back to you with scheduling options."""
             )
         
         # Default: acknowledge message
-        response_text = "Thank you for your message. I'll make sure the landlord sees this."
+        # If Ollama is not available, provide a helpful message
+        if rag_service.llm is None:
+            response_text = "I'm currently unable to process your message with AI assistance. Your message has been saved and the landlord will see it. Please contact your landlord directly if you need immediate assistance."
+        else:
+            response_text = "Thank you for your message. I'll make sure the landlord sees this."
         
         conversations[request.conversation_id].append({
             "role": "assistant",
@@ -258,6 +288,9 @@ The landlord will review this and get back to you with scheduling options."""
         )
         
     except Exception as e:
+        print(f"Error in chat endpoint: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/rag/query", response_model=RAGQueryResponse)

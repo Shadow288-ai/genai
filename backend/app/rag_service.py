@@ -36,13 +36,15 @@ class RAGService:
         print(f"Connecting to Ollama model: {model_name}...")
         try:
             self.llm = Ollama(model=model_name, base_url="http://localhost:11434")
-            # Test connection
-            self.llm.invoke("test")
+            # Test connection with a simple query
+            test_response = self.llm.invoke("test")
             print(f"✓ Connected to Ollama ({model_name})")
+            print(f"  Test response: {test_response[:50] if test_response else 'empty'}...")
         except Exception as e:
             print(f"⚠ Warning: Could not connect to Ollama: {e}")
             print("  Make sure Ollama is running: ollama serve")
             print(f"  And model is pulled: ollama pull {model_name}")
+            print(f"  Test with: ollama run {model_name}")
             self.llm = None
         
         # Vector stores per property
@@ -111,12 +113,14 @@ class RAGService:
             Tuple of (answer, source_chunks)
         """
         if not self.llm:
+            print(f"⚠ RAG query attempted but Ollama is not connected (property: {property_id}, question: {question[:50]}...)")
             return "I'm currently unavailable. Please contact your landlord directly.", []
         
         # Get vector store for property
         vectorstore = self.vector_stores.get(property_id)
         if not vectorstore:
             # No vector store - try common knowledge
+            print(f"⚠ No vector store found for property {property_id}, using common knowledge")
             return self._answer_with_common_knowledge(question)
         
         # Create retriever with similarity search
@@ -174,7 +178,9 @@ Your answer:"""
                 
                 # Format prompt directly (simpler and more reliable)
                 prompt = prompt_template.format(context=context_text, question=question)
+                print(f"✓ Using RAG with {len(context_chunks)} context chunks for property {property_id}")
                 answer = self.llm.invoke(prompt)
+                print(f"✓ RAG query completed successfully (answer length: {len(answer)} chars)")
                 
                 # Extract sources
                 sources = [chunk[:200] + "..." if len(chunk) > 200 else chunk for chunk in context_chunks[:3]]
