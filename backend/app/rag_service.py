@@ -116,6 +116,12 @@ class RAGService:
             print(f"⚠ RAG query attempted but Ollama is not connected (property: {property_id}, question: {question[:50]}...)")
             return "I'm currently unavailable. Please contact your landlord directly.", []
         
+        # Check for subjects that need roasts (macOS, etc.)
+        question_lower = question.lower()
+        macos_keywords = ["macos", "mac os", "macbook", "apple", "mac computer"]
+        if any(keyword in question_lower for keyword in macos_keywords):
+            return self._generate_roast_response("macOS", question)
+        
         # Get vector store for property
         vectorstore = self.vector_stores.get(property_id)
         if not vectorstore:
@@ -158,20 +164,21 @@ class RAGService:
                 # Use RAG with property-specific context
                 prompt_template = PromptTemplate(
                     input_variables=["context", "question"],
-                    template="""You are a helpful property assistant. Answer the question using the context provided below from the house manual.
+                    template="""You are a helpful property assistant. Answer the question using ONLY the context provided below.
 
-IMPORTANT: The context below contains information from the house manual for this specific property. Use this information to answer the question.
-
-Context from house manual:
+Context:
 {context}
 
 Question: {question}
 
-Instructions:
-1. If the answer is clearly in the context above, provide a detailed, step-by-step answer using that information.
-2. If the answer is partially in the context, use what's there and be specific about what you know from the manual.
-3. Be helpful and clear. Reference specific details from the context when possible.
-4. If the context doesn't contain the answer, say so and offer to help further.
+CRITICAL INSTRUCTIONS:
+1. Answer SHORTLY and CONCISELY - be direct and to the point.
+2. Format your answer with proper paragraphs or bullet points for clarity.
+3. NEVER mention that a manual, document, or any source exists. Act as if this information is simply what you know.
+4. NEVER say "according to the manual", "in the manual", "the manual says", or any variation.
+5. If the answer is in the context, provide it directly without referencing sources.
+6. Use bullet points for lists, and paragraphs for explanations.
+7. Keep answers brief - aim for 2-4 sentences or a short bulleted list unless more detail is truly needed.
 
 Your answer:"""
                 )
@@ -194,6 +201,45 @@ Your answer:"""
             print(f"Error in RAG query: {e}")
             return self._answer_with_fallback(question)
     
+    def _generate_roast_response(self, subject: str, question: str) -> Tuple[str, List[str]]:
+        """
+        Generate a humorous roast response using LLM in the style of the example roasts
+        """
+        if not self.llm:
+            return f"{subject}? I don't have much to say about that right now.", []
+        
+        style_examples = """Here are examples of the style of roasts to use:
+- "macOS is here the same way a broken lamp is here — physically present, zero utility."
+- "If laziness were a sport, macOS would still come in last."
+- "He wants to climb K2? He can't even climb out of bed before noon."
+- "Even the houseplants contribute more than macOS."
+- "He's a placeholder the way a crash screen is a feature."
+- "If effort were measured in bytes, macOS would be running on empty."
+- "He's the only guy who could hold a ladder for K2 and still mess it up."
+"""
+
+        prompt = f"""Generate a humorous roast about {subject} in the exact style of these examples:
+
+{style_examples}
+
+The roast should:
+- Be witty and humorous
+- Use creative comparisons and metaphors
+- Be concise (1-2 sentences max)
+- Playfully criticize {subject} as unnecessary or ineffective
+- Match the tone and style of the examples above
+
+Question asked: "{question}"
+
+Generate ONE roast in this style:"""
+
+        try:
+            roast = self.llm.invoke(prompt)
+            return roast.strip(), []
+        except Exception as e:
+            print(f"Error generating roast: {e}")
+            return f"{subject}? Yeah, that's a thing.", []
+    
     def _answer_with_common_knowledge(self, question: str) -> Tuple[str, List[str]]:
         """
         Answer using common knowledge when no property-specific context is available
@@ -201,18 +247,16 @@ Your answer:"""
         if not self.llm:
             return self._escalation_message(), []
         
-        prompt = f"""You are a helpful property assistant. A tenant is asking a question, but you don't have specific information about this property in your knowledge base.
+        prompt = f"""You are a helpful property assistant. Answer this question concisely.
 
 Question: "{question}"
 
-Try to answer using general knowledge about:
-- Common household appliances and how they work
-- General property maintenance tips
-- Standard procedures for rentals
-
-If you can provide a helpful general answer, do so. If the question is too specific to this property or you're not confident, politely explain that you don't have that specific information and ask if they'd like you to escalate this to the landlord.
-
-Be friendly, helpful, and clear. If you answer, be clear it's general advice. If you can't answer, offer escalation.
+Instructions:
+- Answer SHORTLY and CONCISELY (2-4 sentences max, or a brief bulleted list).
+- Format with proper paragraphs or bullet points.
+- Use general knowledge about household appliances, property maintenance, or rental procedures.
+- If you can't answer confidently, politely say you don't have that information and offer to escalate to the landlord.
+- Be direct and helpful.
 
 Your response:"""
 
@@ -230,20 +274,17 @@ Your response:"""
         if not self.llm:
             return self._escalation_message(), []
         
-        prompt = f"""You are a helpful property assistant. A tenant asked a question, but you couldn't find specific information about it in the house manual.
+        prompt = f"""You are a helpful property assistant. Answer this question concisely.
 
 Question: "{question}"
 
-First, try to answer using general knowledge if it's a common question about:
-- Household appliances (TVs, ovens, washers, etc.)
-- General property maintenance
-- Common rental procedures
-
-If you can provide a helpful general answer, do so but mention: "I don't have specific information about this property, but generally..."
-
-If the question is too specific or you're not confident, politely say you don't have that information and ask: "Would you like me to escalate this to your landlord? They can provide the specific answer you need."
-
-Be friendly and helpful. Always offer to escalate if you're not certain.
+Instructions:
+- Answer SHORTLY and CONCISELY (2-4 sentences max, or a brief bulleted list).
+- Format with proper paragraphs or bullet points.
+- Try to answer using general knowledge about household appliances, property maintenance, or rental procedures.
+- If you can provide a helpful general answer, do so briefly.
+- If the question is too specific or you're not confident, politely say you don't have that information and offer to escalate to the landlord.
+- NEVER mention manuals, documents, or sources.
 
 Your response:"""
 
@@ -259,7 +300,7 @@ Your response:"""
     
     def _escalation_message(self) -> str:
         """Default escalation message"""
-        return """I don't have specific information about that in the house manual. Would you like me to escalate this question to your landlord? They can provide you with the exact answer you need.
+        return """I don't have specific information about that. Would you like me to escalate this question to your landlord? They can provide you with the exact answer you need.
 
 Just let me know if you'd like me to contact them, or you can reach out directly using the chat feature."""
 
