@@ -1,26 +1,79 @@
-import React from "react";
-import type { User } from "../../types";
+import React, { useState, useEffect } from "react";
+import type { User, CalendarEvent } from "../../types";
 import {
-  mockCalendarEvents,
   mockProperties,
   mockStays,
 } from "../../services/mockData";
+import { apiService } from "../../services/api";
 
 interface TenantVisitsProps {
   user: User;
 }
 
 const TenantVisits: React.FC<TenantVisitsProps> = ({ user }) => {
+  const [visits, setVisits] = useState<CalendarEvent[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  
   const activeStay = mockStays.find((s) => s.tenantId === user.id && s.status === "active");
-  const visits = activeStay
-    ? mockCalendarEvents.filter(
-        (e) =>
-          e.tenantId === user.id &&
-          e.type === "MAINTENANCE" &&
-          new Date(e.startTime) >= new Date()
-      )
-    : [];
   const properties = mockProperties;
+
+  // Load calendar events from backend
+  useEffect(() => {
+    const loadVisits = async () => {
+      if (!activeStay) {
+        setVisits([]);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        // Fetch events for the property of the active stay
+        const response = await apiService.getAllCalendarEvents(activeStay.propertyId);
+        
+        // Convert API response to CalendarEvent format
+        const allEvents: CalendarEvent[] = response.events.map((e: any) => ({
+          id: e.id,
+          propertyId: e.property_id,
+          type: e.type as any,
+          title: e.title,
+          startTime: e.start_time,
+          endTime: e.end_time,
+          status: e.status as any,
+          tenantId: e.tenant_id,
+          assetId: e.asset_id,
+          incidentId: e.incident_id,
+          isAISuggested: e.is_ai_suggested || false,
+          description: e.description,
+        }));
+        
+        // Filter for MAINTENANCE events that are in the future
+        // Show events for this property where:
+        // - tenantId matches this user, OR
+        // - tenantId is not set (property-wide events)
+        const filteredVisits = allEvents.filter(
+          (e) =>
+            e.type === "MAINTENANCE" &&
+            new Date(e.startTime) >= new Date() &&
+            e.propertyId === activeStay.propertyId &&
+            (!e.tenantId || e.tenantId === user.id)
+        );
+        
+        // Sort by start time
+        filteredVisits.sort((a, b) => 
+          new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+        );
+        
+        setVisits(filteredVisits);
+      } catch (error) {
+        console.error("Failed to load visits:", error);
+        setVisits([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadVisits();
+  }, [activeStay, user.id]);
 
   const getPropertyName = (propertyId: string) => {
     return properties.find((p) => p.id === propertyId)?.name || "Unknown Property";
@@ -41,7 +94,22 @@ const TenantVisits: React.FC<TenantVisitsProps> = ({ user }) => {
         <p className="text-muted">Maintenance appointments and scheduled visits</p>
       </div>
 
-      {visits.length === 0 ? (
+      {isLoading ? (
+        <div className="card card-large">
+          <div className="empty-state">
+            <p>Loading visits...</p>
+          </div>
+        </div>
+      ) : !activeStay ? (
+        <div className="card card-large">
+          <div className="empty-state">
+            <h3>No active stay</h3>
+            <p className="text-muted">
+              You need an active stay to view scheduled visits.
+            </p>
+          </div>
+        </div>
+      ) : visits.length === 0 ? (
         <div className="card card-large">
           <div className="empty-state">
             <h3>No upcoming visits</h3>

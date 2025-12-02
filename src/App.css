@@ -1052,20 +1052,124 @@
   flex-shrink: 0;
 }
 
-.action-text {
+.action-text,
+.action-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  flex: 1;
+}
+
+.action-text strong,
+.action-content strong {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.action-text span,
+.action-content span {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* Tenant Home Redesign */
+.tenant-home-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-xl);
+}
+
+@media (min-width: 768px) {
+  .tenant-home-grid {
+    grid-template-columns: 2fr 1fr;
+  }
+}
+
+.property-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.property-card-header {
+  padding-bottom: var(--spacing-md);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.property-card-header h3 {
+  margin: 0 0 var(--spacing-xs) 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.property-details {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  background: var(--background-gray);
+  border-radius: var(--radius-md);
+}
+
+.property-detail-item {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
 }
 
-.action-text strong {
-  font-size: 0.875rem;
+.detail-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.detail-value {
+  font-size: 1rem;
+  font-weight: 500;
   color: var(--text-primary);
 }
 
-.action-text span {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
+.property-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-top: auto;
+}
+
+.quick-actions-card {
+  height: fit-content;
+}
+
+.quick-actions-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.quick-actions-grid .action-card {
+  width: 100%;
+  flex-direction: row;
+  align-items: flex-start;
+  padding: var(--spacing-lg);
+}
+
+.empty-icon {
+  font-size: 4rem;
+  margin-bottom: var(--spacing-md);
+  opacity: 0.5;
+}
+
+.empty-state {
+  text-align: center;
+  padding: var(--spacing-xl);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
 }
 
 /* Visits */
