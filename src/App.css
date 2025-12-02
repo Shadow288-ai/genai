@@ -645,10 +645,23 @@
   font-size: 0.875rem;
   font-weight: 600;
   color: #717171;
+  overflow: hidden;
+}
+
+.message-avatar-circle.avatar-with-logo {
+  background: white;
+  border: 1px solid #EBEBEB;
 }
 
 .message-avatar-circle .avatar-icon {
   font-size: 1.125rem;
+}
+
+.message-avatar-circle .avatar-logo {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  display: block;
 }
 
 .message-avatar-circle .avatar-initials {

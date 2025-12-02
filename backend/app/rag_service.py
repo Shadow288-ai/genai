@@ -381,6 +381,51 @@ Your response:"""
         return """I don't have specific information about that. Would you like me to escalate this question to your landlord? They can provide you with the exact answer you need.
 
 Just let me know if you'd like me to contact them, or you can reach out directly using the chat feature."""
+    
+    def general_conversation(self, message: str, user_role: str = "TENANT") -> str:
+        """
+        Handle general conversational messages (greetings, casual chat, etc.)
+        Not property-specific, just friendly conversation
+        
+        Args:
+            message: User's message
+            user_role: Role of the user (TENANT or LANDLORD)
+            
+        Returns:
+            Conversational response
+        """
+        if not self.llm:
+            return "Hello! I'm here to help. How can I assist you today?"
+        
+        prompt = self.MASTER_PROMPT + f"""
+
+=== CURRENT SITUATION ===
+The user has sent a general message (not a specific question about the property, and not reporting an issue). This could be a greeting, casual conversation, or general inquiry.
+
+=== USER MESSAGE ===
+"{message}"
+
+=== USER ROLE ===
+{user_role}
+
+=== YOUR RESPONSE ===
+Respond naturally and conversationally. Be friendly, helpful, and brief. If it's a greeting, greet them back warmly. If they're just chatting, engage naturally. If they seem to need help but aren't being specific, gently ask how you can assist them. Keep it short (1-3 sentences max) and don't mention property manuals or technical details unless they ask.
+
+Your response:"""
+
+        try:
+            answer = self.llm.invoke(prompt)
+            return answer.strip()
+        except Exception as e:
+            print(f"Error in general conversation: {e}")
+            # Fallback to friendly responses
+            message_lower = message.lower().strip()
+            if any(greeting in message_lower for greeting in ["hello", "hi", "hey", "good morning", "good afternoon", "good evening"]):
+                return "Hello! How can I help you today?"
+            elif any(thanks in message_lower for thanks in ["thank", "thanks", "appreciate"]):
+                return "You're welcome! Is there anything else I can help with?"
+            else:
+                return "I'm here to help! What can I do for you today?"
 
     def triage_issue(self, description: str) -> dict:
         """

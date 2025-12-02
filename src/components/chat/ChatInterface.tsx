@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import type { User, Message, Conversation, Property } from "../../types";
 import { apiService } from "../../services/api";
+import logoIcon from "../../assets/logo.png";
 
 interface ChatInterfaceProps {
   conversation: Conversation;
@@ -280,9 +281,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               )}
               <div className={`message-bubble ${isOwn ? "message-sent" : "message-received"}`}>
                 {!isOwn && (
-                  <div className="message-avatar-circle">
+                  <div className={`message-avatar-circle ${message.senderType === "AI" ? "avatar-with-logo" : ""}`}>
                     {message.senderType === "AI" ? (
-                      <span className="avatar-icon">🤖</span>
+                      <img src={logoIcon} alt="AI Assistant" className="avatar-logo" />
                     ) : (
                       <span className="avatar-initials">{getSenderInitials(message)}</span>
                     )}
@@ -332,8 +333,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         })}
         {isLoading && (
           <div className="message-bubble message-received">
-            <div className="message-avatar-circle">
-              <span className="avatar-icon">🤖</span>
+            <div className="message-avatar-circle avatar-with-logo">
+              <img src={logoIcon} alt="AI Assistant" className="avatar-logo" />
             </div>
             <div className="message-bubble-content">
               <div className="message-sender-name">AI Assistant</div>

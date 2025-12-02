@@ -250,7 +250,34 @@ async def chat(request: ChatRequest):
                 )
             except Exception as e:
                 print(f"Error in RAG query: {e}")
-                # Fall through to issue triage or default response
+                # Fall through to general conversation or default response
+        
+        # For non-question, non-issue messages, use general conversation
+        if not is_question and not is_issue_report and rag_service.llm is not None:
+            try:
+                response_text = rag_service.general_conversation(request.message, request.user_role)
+                
+                conversations[request.conversation_id].append({
+                    "role": "assistant",
+                    "content": response_text,
+                    "timestamp": datetime.now().isoformat(),
+                    "sender_id": "ai-assistant",
+                    "sender_type": "AI",
+                    "metadata": {
+                        "isAISuggestion": True
+                    }
+                })
+                
+                return ChatResponse(
+                    response=response_text,
+                    sources=None,
+                    incident_created=False,
+                    incident_id=None,
+                    incident_details=None
+                )
+            except Exception as e:
+                print(f"Error in general conversation: {e}")
+                # Fall through to default response
         
         # If it's an issue report (and not handled by RAG above)
         if is_issue_report and not incident_created:
