@@ -1,0 +1,23 @@
+# Maintenance History for Downtown Loft (prop-1)
+# Format: asset_id|asset_name|asset_type|maintenance_date|maintenance_type
+
+asset-1|Living Room AC Unit|AC|2022-05-15|installation
+asset-1|Living Room AC Unit|AC|2022-11-20|maintenance
+asset-1|Living Room AC Unit|AC|2023-05-15|maintenance
+asset-1|Living Room AC Unit|AC|2023-11-10|maintenance
+asset-1|Living Room AC Unit|AC|2024-01-10|maintenance
+asset-1|Living Room AC Unit|AC|2024-06-15|repair
+
+asset-2|Central Heating System|HEATER|2021-11-20|installation
+asset-2|Central Heating System|HEATER|2022-11-15|maintenance
+asset-2|Central Heating System|HEATER|2023-11-20|maintenance
+asset-2|Central Heating System|HEATER|2024-02-05|maintenance
+
+asset-3|Bathroom Light Circuit|LIGHTS|2022-01-10|installation
+asset-3|Bathroom Light Circuit|LIGHTS|2023-01-15|maintenance
+asset-3|Bathroom Light Circuit|LIGHTS|2024-01-20|maintenance
+
+asset-4|Wi-Fi Router|ROUTER|2022-03-01|installation
+asset-4|Wi-Fi Router|ROUTER|2023-03-10|maintenance
+asset-4|Wi-Fi Router|ROUTER|2024-03-15|maintenance
+

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import type { LoginCredentials, LoginResult } from "../types";
+import Logo from "./Logo";
 
 interface LoginFormProps {
   onLogin: (credentials: LoginCredentials) => LoginResult;
@@ -33,7 +34,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
     <div className="auth-wrapper">
       <form className="card auth-card" onSubmit={handleSubmit}>
         <div className="auth-header">
-          <h1 className="auth-logo">HomeGuard AI</h1>
+          <Logo size={48} className="auth-logo" />
           <p className="auth-subtitle">Tenant-Landlord Communication Platform</p>
         </div>
 

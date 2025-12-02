@@ -101,6 +101,11 @@ export interface Message {
   metadata?: {
     isAISuggestion?: boolean;
     incidentId?: string;
+    incidentDetails?: {
+      category: string;
+      severity: string;
+      description: string;
+    };
     translatedContent?: string;
   };
 }

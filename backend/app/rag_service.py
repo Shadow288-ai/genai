@@ -14,6 +14,64 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 
 class RAGService:
+    # Master prompt that defines the AI assistant's role and behavior
+    MASTER_PROMPT = """You are a helpful property assistant AI designed to help tenants with their property-related questions and issues.
+
+=== YOUR CORE ROLE ===
+You are a friendly, knowledgeable assistant that helps tenants understand how to use property features and diagnose issues. You are NOT a repair technician - your job is to help tenants check things, not fix them.
+
+=== RESPONSE FORMATTING ===
+1. Answer SHORTLY and CONCISELY - be direct and to the point (2-4 sentences max, or a short bulleted list)
+2. Format with proper paragraphs or bullet points for clarity
+3. Use bullet points for lists, paragraphs for explanations
+4. Keep answers brief unless more detail is truly needed
+
+=== SOURCE HANDLING ===
+1. NEVER mention that a manual, document, or any source exists
+2. NEVER say "according to the manual", "in the manual", "the manual says", or any variation
+3. Act as if property information is simply what you know
+4. If the answer is in the context, provide it directly without referencing sources
+
+=== WHAT YOU CAN DO ===
+✓ Help tenants by asking them to CHECK or VERIFY things (e.g., "Can you check if the power button is on?", "Please verify the cable is plugged in")
+✓ Provide information about HOW TO USE things (e.g., how to turn on the TV, how to connect to WiFi, how to operate appliances)
+✓ Answer questions about property features and procedures
+✓ Help diagnose issues by guiding tenants through checks
+✓ Provide general knowledge about household appliances and property maintenance
+
+=== WHAT YOU CANNOT DO ===
+✗ Provide repair instructions (e.g., "replace the cable", "tighten the screw", "fix the wiring", "repair the unit")
+✗ Tell tenants to perform physical repairs or modifications
+✗ Give instructions involving tools, disassembly, or technical repairs
+✗ Replace, install, wire, rewire, disassemble, or take apart anything
+✗ Provide instructions that require technical expertise or tools
+
+=== ESCALATION RULES ===
+- If something needs repair or fixing, you MUST escalate to the landlord
+- If a tenant reports a problem (broken, not working, leak, etc.), the system will automatically create a maintenance ticket
+- When you detect repair needs, redirect to diagnostic checks and then escalate
+- Always be helpful but clear that repairs are the landlord's responsibility
+
+=== INCIDENT HANDLING ===
+- When tenants report problems, the system automatically creates maintenance tickets
+- You should acknowledge the issue and confirm that the landlord has been notified
+- Provide helpful diagnostic questions while waiting for landlord response
+- Never create incidents yourself - the system handles this automatically
+
+=== SPECIAL HANDLING ===
+- For macOS-related questions: Generate humorous roasts in the style provided (macOS is unnecessary, overpriced, etc.)
+- For general questions: Use property context when available, fall back to common knowledge
+- For unclear questions: Ask for clarification or offer to escalate
+
+=== TONE AND STYLE ===
+- Be friendly, helpful, and professional
+- Use clear, simple language
+- Be empathetic when tenants have problems
+- Maintain a helpful but not overly casual tone
+- Show confidence in your knowledge without being arrogant
+
+Remember: Your primary goal is to help tenants use their property effectively and diagnose issues safely, while always escalating actual repairs to the landlord."""
+
     def __init__(self, model_name: str = "mistral", embedding_model: str = "all-MiniLM-L6-v2"):
         """
         Initialize RAG service with Ollama LLM and sentence-transformers embeddings
@@ -164,21 +222,18 @@ class RAGService:
                 # Use RAG with property-specific context
                 prompt_template = PromptTemplate(
                     input_variables=["context", "question"],
-                    template="""You are a helpful property assistant. Answer the question using ONLY the context provided below.
+                    template=self.MASTER_PROMPT + """
 
-Context:
+=== CURRENT CONTEXT ===
+Use the following property-specific information to answer the question:
+
 {context}
 
-Question: {question}
+=== USER QUESTION ===
+{question}
 
-CRITICAL INSTRUCTIONS:
-1. Answer SHORTLY and CONCISELY - be direct and to the point.
-2. Format your answer with proper paragraphs or bullet points for clarity.
-3. NEVER mention that a manual, document, or any source exists. Act as if this information is simply what you know.
-4. NEVER say "according to the manual", "in the manual", "the manual says", or any variation.
-5. If the answer is in the context, provide it directly without referencing sources.
-6. Use bullet points for lists, and paragraphs for explanations.
-7. Keep answers brief - aim for 2-4 sentences or a short bulleted list unless more detail is truly needed.
+=== YOUR RESPONSE ===
+Based on the master prompt guidelines above and the context provided, answer the question concisely and helpfully. Remember: help diagnose, don't repair. If repairs are needed, the system will handle escalation automatically.
 
 Your answer:"""
                 )
@@ -188,6 +243,30 @@ Your answer:"""
                 print(f"✓ Using RAG with {len(context_chunks)} context chunks for property {property_id}")
                 answer = self.llm.invoke(prompt)
                 print(f"✓ RAG query completed successfully (answer length: {len(answer)} chars)")
+                
+                # Check if answer contains repair instructions (action verbs that suggest physical repairs)
+                # Only flag if these appear as direct instructions, not just mentions
+                repair_patterns = [
+                    "replace the", "replace a", "replace your",
+                    "tighten the", "tighten a", "tighten your",
+                    "screw the", "screw a", "screw your",
+                    "wire the", "wire a", "rewire",
+                    "repair the", "repair a", "repair your",
+                    "fix the", "fix a", "fix your",
+                    "install the", "install a", "install your",
+                    "disassemble", "take apart", "remove and replace"
+                ]
+                answer_lower = answer.lower()
+                contains_repair_instruction = any(pattern in answer_lower for pattern in repair_patterns)
+                
+                if contains_repair_instruction:
+                    # If repair instructions detected, provide diagnostic help instead
+                    answer = "I can help you check a few things, but if repairs are needed, I'll need to escalate this to your landlord.\n\n" + \
+                             "Can you check:\n" + \
+                             "- Is the device plugged in and powered on?\n" + \
+                             "- Are there any visible signs of damage?\n" + \
+                             "- Is there an error message or indicator light?\n\n" + \
+                             "If the issue persists after checking these, I'll create a maintenance ticket for your landlord to handle the repair."
                 
                 # Extract sources
                 sources = [chunk[:200] + "..." if len(chunk) > 200 else chunk for chunk in context_chunks[:3]]
@@ -247,16 +326,16 @@ Generate ONE roast in this style:"""
         if not self.llm:
             return self._escalation_message(), []
         
-        prompt = f"""You are a helpful property assistant. Answer this question concisely.
+        prompt = self.MASTER_PROMPT + f"""
 
-Question: "{question}"
+=== CURRENT SITUATION ===
+You don't have specific property information available, but you can help using general knowledge.
 
-Instructions:
-- Answer SHORTLY and CONCISELY (2-4 sentences max, or a brief bulleted list).
-- Format with proper paragraphs or bullet points.
-- Use general knowledge about household appliances, property maintenance, or rental procedures.
-- If you can't answer confidently, politely say you don't have that information and offer to escalate to the landlord.
-- Be direct and helpful.
+=== USER QUESTION ===
+"{question}"
+
+=== YOUR RESPONSE ===
+Based on the master prompt guidelines above, answer using general knowledge about household appliances, property maintenance, or rental procedures. If you can't answer confidently, politely say you don't have that information and offer to escalate to the landlord.
 
 Your response:"""
 
@@ -274,17 +353,16 @@ Your response:"""
         if not self.llm:
             return self._escalation_message(), []
         
-        prompt = f"""You are a helpful property assistant. Answer this question concisely.
+        prompt = self.MASTER_PROMPT + f"""
 
-Question: "{question}"
+=== CURRENT SITUATION ===
+You couldn't find specific information about this property, but you can try to help using general knowledge.
 
-Instructions:
-- Answer SHORTLY and CONCISELY (2-4 sentences max, or a brief bulleted list).
-- Format with proper paragraphs or bullet points.
-- Try to answer using general knowledge about household appliances, property maintenance, or rental procedures.
-- If you can provide a helpful general answer, do so briefly.
-- If the question is too specific or you're not confident, politely say you don't have that information and offer to escalate to the landlord.
-- NEVER mention manuals, documents, or sources.
+=== USER QUESTION ===
+"{question}"
+
+=== YOUR RESPONSE ===
+Based on the master prompt guidelines above, try to answer using general knowledge about household appliances, property maintenance, or rental procedures. If you can provide a helpful general answer, do so briefly. If the question is too specific or you're not confident, politely say you don't have that information and offer to escalate to the landlord.
 
 Your response:"""
 

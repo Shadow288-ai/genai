@@ -1,0 +1,9 @@
+# Maintenance History for Beach House (prop-2)
+# Format: asset_id|asset_name|asset_type|maintenance_date|maintenance_type
+
+asset-5|Master Bedroom AC|AC|2022-03-10|installation
+asset-5|Master Bedroom AC|AC|2022-09-15|maintenance
+asset-5|Master Bedroom AC|AC|2023-03-20|maintenance
+asset-5|Master Bedroom AC|AC|2023-09-25|maintenance
+asset-5|Master Bedroom AC|AC|2024-03-30|maintenance
+

@@ -6,6 +6,7 @@ import LandlordProperties from "../pages/landlord/LandlordProperties";
 import LandlordInbox from "../pages/landlord/LandlordInbox";
 import LandlordCalendar from "../pages/landlord/LandlordCalendar";
 import LandlordMaintenance from "../pages/landlord/LandlordMaintenance";
+import Logo from "../components/Logo";
 
 interface LandlordLayoutProps {
   user: User;
@@ -24,7 +25,7 @@ const LandlordLayout: React.FC<LandlordLayoutProps> = ({ user, onLogout }) => {
     <div className="app-container landlord-layout">
       <header className="app-header">
         <div className="header-content">
-          <h1 className="app-logo">HomeGuard AI</h1>
+          <Logo size={32} className="app-logo" />
           <nav className="main-nav">
             <NavLink
               to="/landlord/dashboard"

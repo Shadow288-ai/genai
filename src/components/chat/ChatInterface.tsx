@@ -73,6 +73,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             timestamp: new Date().toISOString(),
             metadata: {
               incidentId: response.incident_id,
+              incidentDetails: response.incident_details,
               isAISuggestion: true,
             },
           };
@@ -176,10 +177,35 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     return date.toLocaleDateString() + " " + date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
+  const formatDateHeader = (timestamp: string, prevTimestamp?: string) => {
+    const date = new Date(timestamp);
+    const prevDate = prevTimestamp ? new Date(prevTimestamp) : null;
+    const now = new Date();
+    
+    if (!prevDate || date.toDateString() !== prevDate.toDateString()) {
+      if (date.toDateString() === now.toDateString()) {
+        return "Today";
+      }
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      if (date.toDateString() === yesterday.toDateString()) {
+        return "Yesterday";
+      }
+      return date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+    }
+    return null;
+  };
+
   const getSenderName = (message: Message) => {
     if (message.senderType === "AI") return "AI Assistant";
     if (message.senderType === "LANDLORD") return "Landlord";
     return currentUser.name;
+  };
+
+  const getSenderInitials = (message: Message) => {
+    if (message.senderType === "AI") return "AI";
+    const name = message.senderType === "LANDLORD" ? "Landlord" : currentUser.name;
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
   const isCurrentUser = (message: Message) => {
@@ -240,52 +266,113 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       )}
 
       <div className="chat-messages">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`message ${message.senderType.toLowerCase()} ${isCurrentUser(message) ? "own" : ""}`}
-          >
-            <div className="message-avatar">
-              {message.senderType === "AI" ? "🤖" : message.senderType === "LANDLORD" ? "👤" : "👤"}
-            </div>
-            <div className="message-content">
-              <div className="message-header">
-                <strong>{getSenderName(message)}</strong>
-                <span className="message-time">{formatTime(message.timestamp)}</span>
-              </div>
-              <div className="message-body">{message.content}</div>
-              {message.metadata?.incidentId && (
-                <div className="message-meta">
-                  <span className="badge">Maintenance ticket created</span>
+        {messages.map((message, index) => {
+          const prevMessage = index > 0 ? messages[index - 1] : null;
+          const dateHeader = formatDateHeader(message.timestamp, prevMessage?.timestamp);
+          const isOwn = isCurrentUser(message);
+          
+          return (
+            <React.Fragment key={message.id}>
+              {dateHeader && (
+                <div className="message-date-divider">
+                  <span>{dateHeader}</span>
                 </div>
               )}
-            </div>
-          </div>
-        ))}
+              <div className={`message-bubble ${isOwn ? "message-sent" : "message-received"}`}>
+                {!isOwn && (
+                  <div className="message-avatar-circle">
+                    {message.senderType === "AI" ? (
+                      <span className="avatar-icon">🤖</span>
+                    ) : (
+                      <span className="avatar-initials">{getSenderInitials(message)}</span>
+                    )}
+                  </div>
+                )}
+                <div className="message-bubble-content">
+                  {!isOwn && (
+                    <div className="message-sender-name">{getSenderName(message)}</div>
+                  )}
+                  <div className="message-text">{message.content}</div>
+                  {message.metadata?.incidentId && message.metadata?.incidentDetails && (
+                    <div className="incident-card">
+                      <div className="incident-card-header">
+                        <div className="incident-card-icon">🎫</div>
+                        <div>
+                          <h4>Maintenance Ticket Created</h4>
+                          <p className="text-muted">Your landlord has been notified</p>
+                        </div>
+                      </div>
+                      <div className="incident-card-body">
+                        <div className="incident-card-row">
+                          <span className="incident-label">Issue:</span>
+                          <span className="incident-value">{message.metadata.incidentDetails.description}</span>
+                        </div>
+                        <div className="incident-card-row">
+                          <span className="incident-label">Category:</span>
+                          <span className="incident-value">{message.metadata.incidentDetails.category}</span>
+                        </div>
+                        <div className="incident-card-row">
+                          <span className="incident-label">Severity:</span>
+                          <span className={`incident-severity severity-${message.metadata.incidentDetails.severity}`}>
+                            {message.metadata.incidentDetails.severity}
+                          </span>
+                        </div>
+                        <div className="incident-card-row">
+                          <span className="incident-label">Ticket ID:</span>
+                          <span className="incident-value incident-id">{message.metadata.incidentId.substring(0, 8)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="message-timestamp">{formatTime(message.timestamp)}</div>
+                </div>
+              </div>
+            </React.Fragment>
+          );
+        })}
         {isLoading && (
-          <div className="message ai">
-            <div className="message-avatar">🤖</div>
-            <div className="message-content">
-              <div className="message-body">Thinking...</div>
+          <div className="message-bubble message-received">
+            <div className="message-avatar-circle">
+              <span className="avatar-icon">🤖</span>
+            </div>
+            <div className="message-bubble-content">
+              <div className="message-sender-name">AI Assistant</div>
+              <div className="message-text typing-indicator">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
             </div>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      <form className="chat-input-form" onSubmit={handleSend}>
-        <input
-          type="text"
-          className="chat-input"
-          placeholder={isLoading ? "AI is thinking..." : "Type a message..."}
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          disabled={isLoading}
-        />
-        <button type="submit" className="btn-primary btn-send" disabled={isLoading || !inputValue.trim()}>
-          {isLoading ? "..." : "Send"}
-        </button>
-      </form>
+      <div className="chat-input-container">
+        <form className="chat-input-form" onSubmit={handleSend}>
+          <div className="chat-input-wrapper">
+            <input
+              type="text"
+              className="chat-input"
+              placeholder={isLoading ? "AI is thinking..." : "Type a message..."}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              disabled={isLoading}
+            />
+            <button 
+              type="submit" 
+              className="chat-send-button" 
+              disabled={isLoading || !inputValue.trim()}
+              aria-label="Send message"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 };

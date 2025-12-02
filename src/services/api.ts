@@ -17,6 +17,11 @@ export interface ChatResponse {
   sources?: string[];
   incident_created: boolean;
   incident_id?: string;
+  incident_details?: {
+    category: string;
+    severity: string;
+    description: string;
+  };
 }
 
 export interface RAGQueryRequest {
@@ -217,6 +222,39 @@ class ApiService {
   }> {
     const params = propertyId ? `?property_id=${propertyId}` : "";
     return this.request(`/api/calendar/events${params}`);
+  }
+
+  async getMaintenancePredictions(propertyId: string): Promise<{
+    property_id: string;
+    predictions: Array<{
+      asset_id: string;
+      asset_name: string;
+      asset_type: string;
+      predicted_date: string;
+      confidence: number;
+      days_until: number;
+      reasoning: string;
+      last_maintenance?: string;
+      average_interval_days: number;
+      maintenance_count: number;
+    }>;
+  }> {
+    return this.request(`/api/maintenance/predictions/${propertyId}`);
+  }
+
+  async getAssetMaintenancePrediction(propertyId: string, assetId: string): Promise<{
+    asset_id: string;
+    asset_name: string;
+    asset_type: string;
+    predicted_date: string;
+    confidence: number;
+    days_until: number;
+    reasoning: string;
+    last_maintenance?: string;
+    average_interval_days: number;
+    maintenance_count: number;
+  }> {
+    return this.request(`/api/maintenance/predictions/${propertyId}/${assetId}`);
   }
 }
 

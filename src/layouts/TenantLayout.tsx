@@ -5,6 +5,7 @@ import TenantHome from "../pages/tenant/TenantHome";
 import TenantMessages from "../pages/tenant/TenantMessages";
 import TenantVisits from "../pages/tenant/TenantVisits";
 import TenantProfile from "../pages/tenant/TenantProfile";
+import Logo from "../components/Logo";
 
 interface TenantLayoutProps {
   user: User;
@@ -23,7 +24,7 @@ const TenantLayout: React.FC<TenantLayoutProps> = ({ user, onLogout }) => {
     <div className="app-container tenant-layout">
       <header className="app-header">
         <div className="header-content">
-          <h1 className="app-logo">HomeGuard AI</h1>
+          <Logo size={32} className="app-logo" />
           <nav className="main-nav">
             <NavLink to="/tenant/home" className={({ isActive }) => (isActive ? "active" : "")}>
               Home
