@@ -1,6 +1,6 @@
 """
 FastAPI backend for HomeGuard AI
-Provides RAG-powered chat and AI assistant endpoints
+Simplified version maintaining all functionality
 """
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,11 +17,8 @@ from app.models import (
     HealthResponse,
     CalendarEventRequest,
     CalendarEventResponse,
-    MaintenancePredictionResponse,
-    MaintenancePredictionsResponse,
 )
 from app.rag_service import RAGService
-from app.maintenance_predictor import get_predictor
 
 app = FastAPI(title="HomeGuard AI API", version="1.0.0")
 
@@ -42,6 +39,95 @@ conversations: Dict[str, List[Dict]] = {}
 incidents: Dict[str, Dict] = {}
 calendar_events: Dict[str, Dict] = {}
 
+# Helper function to create incident
+def create_incident(property_id: str, conversation_id: str, description: str) -> str:
+    """Create an incident and return its ID"""
+    triage_result = rag_service.triage_issue(description)
+    incident_id = str(uuid.uuid4())
+    incidents[incident_id] = {
+        "id": incident_id,
+        "property_id": property_id,
+        "conversation_id": conversation_id,
+        "description": description,
+        "category": triage_result["category"],
+        "severity": triage_result["severity"],
+        "status": "reported",
+        "created_at": datetime.now().isoformat(),
+        "ai_suggested": True,
+        "awaiting_more_info": True  # Flag to track if we need more information
+    }
+    print(f"✓ Created incident {incident_id} for issue report")
+    return incident_id
+
+# Helper function to update incident with additional information
+def update_incident(incident_id: str, additional_info: str):
+    """Update an incident with additional information from tenant"""
+    if incident_id in incidents:
+        incident = incidents[incident_id]
+        # Append additional info to description
+        incident["description"] = f"{incident['description']}\n\nAdditional details: {additional_info}"
+        incident["awaiting_more_info"] = False  # Mark as complete
+        print(f"✓ Updated incident {incident_id} with additional information")
+
+# Helper function to find open incident in conversation
+def find_open_incident(conversation_id: str) -> Optional[str]:
+    """Find an incident that's awaiting more information in this conversation"""
+    for incident_id, incident in incidents.items():
+        if (incident.get("conversation_id") == conversation_id and 
+            incident.get("status") == "reported" and 
+            incident.get("awaiting_more_info", False)):
+            return incident_id
+    return None
+
+# Helper function to generate follow-up questions
+def generate_followup_questions(issue_description: str, category: str) -> str:
+    """Generate relevant follow-up questions based on the issue"""
+    if not rag_service.llm:
+        return "Can you provide more details about when this started and what exactly is happening?"
+    
+    prompt = f"""A tenant has reported an issue. Generate 2-3 specific, helpful follow-up questions to gather more information.
+
+Issue reported: "{issue_description}"
+Category: {category}
+
+Generate questions that will help understand:
+- When did this start?
+- What exactly is happening?
+- Any error messages or unusual behavior?
+- Location or specific device affected?
+
+Format as a friendly message asking these questions. Keep it concise (2-3 sentences max).
+
+Your response:"""
+    
+    try:
+        questions = rag_service.llm.invoke(prompt)
+        return questions.strip()
+    except Exception as e:
+        print(f"Error generating follow-up questions: {e}")
+        return "Can you provide more details about when this started and what exactly is happening?"
+
+# Helper function to check if message is a question
+def is_question(message: str) -> bool:
+    """Check if message is likely a question"""
+    msg_lower = message.lower().strip()
+    question_words = ["how", "what", "where", "when", "why", "can you", "tell me", 
+                      "explain", "do you know", "show me", "help me", "i need to know",
+                      "how do i", "how to", "what is", "what are", "where is", "where are"]
+    return ("?" in message or 
+            any(word in msg_lower for word in question_words) or
+            msg_lower.startswith(("how", "what", "where", "when", "why", "can", "tell", "show")))
+
+# Helper function to check if message is an issue report
+def is_issue_report(message: str) -> bool:
+    """Check if message reports an issue"""
+    msg_lower = message.lower()
+    issue_keywords = ["broken", "not working", "problem", "issue", "faulty", "noise", 
+                      "leak", "flicker", "doesn't work", "won't work", "not functioning", 
+                      "malfunction", "damaged", "out of order", "not responding", 
+                      "stopped working", "not turning on", "error"]
+    return any(keyword in msg_lower for keyword in issue_keywords)
+
 # Load house manuals from files
 def load_house_manuals():
     """Load house manual documents from data directory"""
@@ -49,13 +135,10 @@ def load_house_manuals():
     
     if not data_dir.exists():
         print(f"⚠ Warning: House manuals directory not found: {data_dir}")
-        print("  Creating sample data directory...")
         data_dir.mkdir(parents=True, exist_ok=True)
         return {}
     
     manuals = {}
-    
-    # Map property IDs to file names
     property_files = {
         "prop-1": "prop-1_downtown_loft.txt",
         "prop-2": "prop-2_beach_house.txt",
@@ -68,10 +151,6 @@ def load_house_manuals():
             if content:
                 manuals[property_id] = [content]
                 print(f"✓ Loaded house manual for {property_id} from {filename}")
-            else:
-                print(f"⚠ Warning: Could not load content from {filename}")
-        else:
-            print(f"⚠ Warning: House manual file not found: {file_path}")
     
     return manuals
 
@@ -83,44 +162,35 @@ HOUSE_MANUALS = load_house_manuals()
 
 if not HOUSE_MANUALS:
     print("\n⚠ No house manuals loaded. Using fallback sample data.")
-    # Fallback to sample data if files don't exist
     HOUSE_MANUALS = {
-        "prop-1": [
-            """
-            Downtown Loft - House Manual
+        "prop-1": ["""Downtown Loft - House Manual
             
-            WELCOME
-            Welcome to your stay! This modern loft is located in the heart of downtown.
+WELCOME
+Welcome to your stay! This modern loft is located in the heart of downtown.
             
-            WI-FI
-            Network: DowntownLoft_Guest
-            Password: Welcome2024!
-            The router is located in the living room, on the shelf next to the TV.
-            To reset: Unplug for 10 seconds, then plug back in. Wait 2 minutes for full restart.
+WI-FI
+Network: DowntownLoft_Guest
+Password: Welcome2024!
+The router is located in the living room, on the shelf next to the TV.
+To reset: Unplug for 10 seconds, then plug back in. Wait 2 minutes for full restart.
             
-            TV & ENTERTAINMENT
-            The TV is a Samsung 55" Smart TV.
-            To turn on: Use the Samsung remote (black, on the coffee table).
-            Press the power button, then select HDMI 1 for cable, or use the Smart TV apps.
-            Netflix, Hulu, and Disney+ are pre-installed. Use the guest account (no password needed).
-            If the TV won't turn on, check that the power strip under the TV is switched on.
-            """
-        ],
-        "prop-2": [
-            """
-            Beach House - House Manual
+TV & ENTERTAINMENT
+The TV is a Samsung 55" Smart TV.
+To turn on: Use the Samsung remote (black, on the coffee table).
+Press the power button, then select HDMI 1 for cable, or use the Smart TV apps.
+Netflix, Hulu, and Disney+ are pre-installed. Use the guest account (no password needed).
+If the TV won't turn on, check that the power strip under the TV is switched on."""],
+        "prop-2": ["""Beach House - House Manual
             
-            WELCOME
-            Welcome to your beachfront stay!
+WELCOME
+Welcome to your beachfront stay!
             
-            WI-FI
-            Network: BeachHouse_WiFi
-            Password: OceanView2024!
+WI-FI
+Network: BeachHouse_WiFi
+Password: OceanView2024!
             
-            AC
-            Master bedroom has individual AC unit. Use remote control on nightstand.
-            """
-        ]
+AC
+Master bedroom has individual AC unit. Use remote control on nightstand."""]
     }
 
 # Initialize vector stores with house manual data
@@ -145,9 +215,7 @@ async def health_check():
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    """
-    Main chat endpoint - handles tenant/landlord messages and AI responses
-    """
+    """Main chat endpoint - handles tenant/landlord messages and AI responses"""
     try:
         # Store user message
         if request.conversation_id not in conversations:
@@ -161,62 +229,115 @@ async def chat(request: ChatRequest):
             "sender_type": request.user_role
         })
         
-        # Check if message might be a question (improved heuristic)
-        message_lower = request.message.lower().strip()
-        is_question = (
-            "?" in request.message or 
-            any(word in message_lower for word in [
-                "how", "what", "where", "when", "why", "can you", "tell me", 
-                "explain", "do you know", "show me", "help me", "i need to know",
-                "how do i", "how to", "what is", "what are", "where is", "where are"
-            ]) or
-            message_lower.startswith(("how", "what", "where", "when", "why", "can", "tell", "show"))
-        )
+        # If message is from landlord, AI should NOT respond - tenant will respond
+        if request.user_role == "LANDLORD":
+            return ChatResponse(
+                response="",  # Empty response - AI doesn't respond to landlord messages
+                sources=None,
+                incident_created=False,
+                incident_id=None,
+                incident_details=None
+            )
         
+        # From here on, only TENANT messages are processed by AI
+        
+        # Check if there's an open incident awaiting more information
+        open_incident_id = find_open_incident(request.conversation_id)
+        if open_incident_id:
+            # Update the incident with additional information
+            update_incident(open_incident_id, request.message)
+            incident = incidents[open_incident_id]
+            
+            # Confirm receipt and close the follow-up
+            response_text = f"""Thank you for the additional information! I've updated the maintenance ticket (ID: {open_incident_id[:8]}) with these details.
+
+**Updated Ticket:**
+- Category: {incident['category']}
+- Severity: {incident['severity']}
+- Description: {incident['description'][:200]}...
+
+Your landlord has been notified and will review the complete ticket shortly."""
+            
+            conversations[request.conversation_id].append({
+                "role": "assistant",
+                "content": response_text,
+                "timestamp": datetime.now().isoformat(),
+                "sender_id": "ai-assistant",
+                "sender_type": "AI",
+                "metadata": {
+                    "isAISuggestion": True,
+                    "incidentId": open_incident_id
+                }
+            })
+            
+            return ChatResponse(
+                response=response_text,
+                sources=None,
+                incident_created=False,
+                incident_id=open_incident_id,
+                incident_details=_get_incident_details(open_incident_id)
+            )
+        
+        # Check message type
+        msg_is_question = is_question(request.message)
+        msg_is_issue = is_issue_report(request.message)
         incident_created = False
         incident_id = None
         
-        # Check if it's an issue report (for tenants, always create a ticket)
-        issue_keywords = ["broken", "not working", "problem", "issue", "faulty", "noise", "leak", "flicker", "doesn't work", "won't work", "not functioning", "malfunction", "damaged", "out of order", "not responding", "stopped working", "not turning on", "error"]
-        is_issue_report = any(keyword in message_lower for keyword in issue_keywords)
-        
-        # If tenant reports a problem, ALWAYS create an incident first
-        if is_issue_report and request.user_role == "TENANT":
-            # Triage the issue
-            triage_result = rag_service.triage_issue(request.message)
-            
-            # Create incident immediately
-            incident_id = str(uuid.uuid4())
-            incidents[incident_id] = {
-                "id": incident_id,
-                "property_id": request.property_id,
-                "conversation_id": request.conversation_id,
-                "description": request.message,
-                "category": triage_result["category"],
-                "severity": triage_result["severity"],
-                "status": "reported",
-                "created_at": datetime.now().isoformat(),
-                "ai_suggested": True
-            }
+        # Create incident if tenant reports an issue
+        if msg_is_issue:
+            incident_id = create_incident(request.property_id, request.conversation_id, request.message)
             incident_created = True
-            print(f"✓ Created incident {incident_id} for tenant issue report")
+            incident = incidents[incident_id]
+            
+            # Generate and ask follow-up questions
+            followup_questions = generate_followup_questions(request.message, incident['category'])
+            
+            # Create response with ticket creation and follow-up questions
+            response_text = f"""I've created a maintenance ticket for your issue and **escalated it to your landlord**.
+
+**Ticket Created:**
+- Ticket ID: {incident_id[:8]}
+- Category: {incident['category']}
+- Severity: {incident['severity']}
+
+{followup_questions}
+
+The landlord has been notified and will review your ticket once you provide these details."""
+            
+            # Store AI response
+            conversations[request.conversation_id].append({
+                "role": "assistant",
+                "content": response_text,
+                "timestamp": datetime.now().isoformat(),
+                "sender_id": "ai-assistant",
+                "sender_type": "AI",
+                "metadata": {
+                    "incidentId": incident_id,
+                    "isAISuggestion": True
+                }
+            })
+            
+            return ChatResponse(
+                response=response_text,
+                sources=None,
+                incident_created=incident_created,
+                incident_id=incident_id,
+                incident_details=_get_incident_details(incident_id)
+            )
         
-        # Use RAG if it's a question and Ollama is available
-        should_use_rag = (
-            is_question and 
-            rag_service.llm is not None
-        )
-        
-        if should_use_rag:
+        # Handle RAG query for questions
+        if msg_is_question and rag_service.llm is not None:
             try:
                 answer, sources = rag_service.query(request.property_id, request.message)
                 
-                # If an incident was created, append escalation message
+                # Append escalation message if incident was created
                 if incident_created:
-                    escalation_msg = f"\n\n✓ **I've escalated this issue to your landlord.** A maintenance ticket (ID: {incident_id[:8]}) has been created and they will review it shortly."
-                    answer = answer + escalation_msg
+                    incident = incidents[incident_id]
+                    followup_questions = generate_followup_questions(request.message, incident['category'])
+                    answer += f"\n\n✓ **I've created a maintenance ticket (ID: {incident_id[:8]}) and escalated it to your landlord.**\n\n{followup_questions}"
                 
-                # Store AI response
+                # Store and return response
                 conversations[request.conversation_id].append({
                     "role": "assistant",
                     "content": answer,
@@ -230,44 +351,28 @@ async def chat(request: ChatRequest):
                     }
                 })
                 
-                # Include incident details if created
-                incident_details = None
-                if incident_created and incident_id:
-                    incident = incidents.get(incident_id)
-                    if incident:
-                        incident_details = {
-                            "category": incident.get("category"),
-                            "severity": incident.get("severity"),
-                            "description": incident.get("description"),
-                        }
-                
                 return ChatResponse(
                     response=answer,
                     sources=sources,
                     incident_created=incident_created,
                     incident_id=incident_id if incident_created else None,
-                    incident_details=incident_details
+                    incident_details=_get_incident_details(incident_id) if incident_created else None
                 )
             except Exception as e:
                 print(f"Error in RAG query: {e}")
-                # Fall through to general conversation or default response
         
-        # For non-question, non-issue messages, use general conversation
-        if not is_question and not is_issue_report and rag_service.llm is not None:
+        # Handle general conversation for non-question, non-issue messages
+        if not msg_is_question and not msg_is_issue and rag_service.llm is not None:
             try:
                 response_text = rag_service.general_conversation(request.message, request.user_role)
-                
                 conversations[request.conversation_id].append({
                     "role": "assistant",
                     "content": response_text,
                     "timestamp": datetime.now().isoformat(),
                     "sender_id": "ai-assistant",
                     "sender_type": "AI",
-                    "metadata": {
-                        "isAISuggestion": True
-                    }
+                    "metadata": {"isAISuggestion": True}
                 })
-                
                 return ChatResponse(
                     response=response_text,
                     sources=None,
@@ -277,51 +382,25 @@ async def chat(request: ChatRequest):
                 )
             except Exception as e:
                 print(f"Error in general conversation: {e}")
-                # Fall through to default response
         
-        # If it's an issue report (and not handled by RAG above)
-        if is_issue_report and not incident_created:
-            # This handles cases where RAG wasn't used but it's still an issue
-            if request.user_role == "TENANT":
-                # Triage the issue
-                triage_result = rag_service.triage_issue(request.message)
-                
-                # Create incident
-                incident_id = str(uuid.uuid4())
-                incidents[incident_id] = {
-                    "id": incident_id,
-                    "property_id": request.property_id,
-                    "conversation_id": request.conversation_id,
-                    "description": request.message,
-                    "category": triage_result["category"],
-                    "severity": triage_result["severity"],
-                    "status": "reported",
-                    "created_at": datetime.now().isoformat(),
-                    "ai_suggested": True
-                }
-                incident_created = True
-                
-                # Generate AI response
-                response_text = f"""I've analyzed your issue and **escalated it to your landlord**. A maintenance ticket has been created.
+        # Handle issue reports (when not handled by RAG above)
+        # This case should not happen now since we handle issues earlier, but keeping for safety
+        if msg_is_issue and not incident_created:
+            incident_id = create_incident(request.property_id, request.conversation_id, request.message)
+            incident_created = True
+            incident = incidents[incident_id]
+            followup_questions = generate_followup_questions(request.message, incident['category'])
+            triage_result = rag_service.triage_issue(request.message)
+            response_text = f"""I've created a maintenance ticket for your issue and **escalated it to your landlord**.
 
-**Category:** {triage_result['category']}
-**Severity:** {triage_result['severity']}
-**Ticket ID:** {incident_id[:8]}
+**Ticket Created:**
+- Ticket ID: {incident_id[:8]}
+- Category: {triage_result['category']}
+- Severity: {triage_result['severity']}
 
-**Suggested actions:**
-{chr(10).join('- ' + action for action in triage_result['suggested_actions'])}
+{followup_questions}
 
-The landlord will review this and get back to you with scheduling options."""
-            else:
-                # For landlords, just triage without creating incident
-                triage_result = rag_service.triage_issue(request.message)
-                response_text = f"""Issue analysis:
-
-**Category:** {triage_result['category']}
-**Severity:** {triage_result['severity']}
-
-**Suggested actions:**
-{chr(10).join('- ' + action for action in triage_result['suggested_actions'])}"""
+The landlord has been notified and will review your ticket once you provide these details."""
             
             conversations[request.conversation_id].append({
                 "role": "assistant",
@@ -330,36 +409,25 @@ The landlord will review this and get back to you with scheduling options."""
                 "sender_id": "ai-assistant",
                 "sender_type": "AI",
                 "metadata": {
-                    "incidentId": incident_id if incident_created else None,
+                    "incidentId": incident_id,
                     "isAISuggestion": True
                 }
             })
-            
-            # Include incident details if created
-            incident_details = None
-            if incident_created and incident_id:
-                incident = incidents.get(incident_id)
-                if incident:
-                    incident_details = {
-                        "category": incident.get("category"),
-                        "severity": incident.get("severity"),
-                        "description": incident.get("description"),
-                    }
             
             return ChatResponse(
                 response=response_text,
                 sources=None,
                 incident_created=incident_created,
-                incident_id=incident_id if incident_created else None,
-                incident_details=incident_details
+                incident_id=incident_id,
+                incident_details=_get_incident_details(incident_id)
             )
         
-        # Default: acknowledge message
-        # If Ollama is not available, provide a helpful message
-        if rag_service.llm is None:
-            response_text = "I'm currently unable to process your message with AI assistance. Your message has been saved and the landlord will see it. Please contact your landlord directly if you need immediate assistance."
-        else:
-            response_text = "Thank you for your message. I'll make sure the landlord sees this."
+        # Default response
+        response_text = (
+            "I'm currently unable to process your message with AI assistance. Your message has been saved and the landlord will see it. Please contact your landlord directly if you need immediate assistance."
+            if rag_service.llm is None
+            else "Thank you for your message. I'll make sure the landlord sees this."
+        )
         
         conversations[request.conversation_id].append({
             "role": "assistant",
@@ -384,11 +452,22 @@ The landlord will review this and get back to you with scheduling options."""
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+def _get_incident_details(incident_id: Optional[str]) -> Optional[dict]:
+    """Get incident details for response"""
+    if not incident_id:
+        return None
+    incident = incidents.get(incident_id)
+    if incident:
+        return {
+            "category": incident.get("category"),
+            "severity": incident.get("severity"),
+            "description": incident.get("description"),
+        }
+    return None
+
 @app.post("/api/rag/query", response_model=RAGQueryResponse)
 async def rag_query(request: RAGQueryRequest):
-    """
-    Direct RAG query endpoint for property assistant
-    """
+    """Direct RAG query endpoint for property assistant"""
     try:
         answer, sources = rag_service.query(request.property_id, request.question)
         return RAGQueryResponse(
@@ -401,27 +480,13 @@ async def rag_query(request: RAGQueryRequest):
 
 @app.post("/api/triage", response_model=IssueTriageResponse)
 async def triage_issue(request: IssueTriageRequest):
-    """
-    Issue triage endpoint
-    """
+    """Issue triage endpoint"""
     try:
         result = rag_service.triage_issue(request.description)
-        
-        # Create incident if requested
         incident_id = None
+        
         if request.property_id:
-            incident_id = str(uuid.uuid4())
-            incidents[incident_id] = {
-                "id": incident_id,
-                "property_id": request.property_id,
-                "conversation_id": request.conversation_id,
-                "description": request.description,
-                "category": result["category"],
-                "severity": result["severity"],
-                "status": "reported",
-                "created_at": datetime.now().isoformat(),
-                "ai_suggested": True
-            }
+            incident_id = create_incident(request.property_id, request.conversation_id or "", request.description)
         
         return IssueTriageResponse(
             category=result["category"],
@@ -435,15 +500,10 @@ async def triage_issue(request: IssueTriageRequest):
 
 @app.post("/api/suggest-reply", response_model=ReplySuggestionResponse)
 async def suggest_reply(request: ReplySuggestionRequest):
-    """
-    Generate reply suggestion for landlord
-    """
+    """Generate reply suggestion for landlord"""
     try:
         suggestion = rag_service.suggest_reply(request.context, tone="professional")
-        return ReplySuggestionResponse(
-            suggestion=suggestion,
-            tone="professional"
-        )
+        return ReplySuggestionResponse(suggestion=suggestion, tone="professional")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -452,25 +512,10 @@ async def get_conversation(conversation_id: str):
     """Get conversation history"""
     messages = conversations.get(conversation_id, [])
     
-    # Convert backend format to frontend Message format
     formatted_messages = []
     for i, msg in enumerate(messages):
-        # Use stored sender_type if available, otherwise infer from role
-        sender_type = msg.get("sender_type")
-        if not sender_type:
-            if msg.get("role") == "user":
-                sender_type = msg.get("sender_type", "TENANT")
-            elif msg.get("role") == "assistant":
-                sender_type = "AI"
-            else:
-                sender_type = "TENANT"
-        
-        sender_id = msg.get("sender_id")
-        if not sender_id:
-            if msg.get("role") == "assistant":
-                sender_id = "ai-assistant"
-            else:
-                sender_id = msg.get("user_id", "unknown")
+        sender_type = msg.get("sender_type") or ("AI" if msg.get("role") == "assistant" else "TENANT")
+        sender_id = msg.get("sender_id") or ("ai-assistant" if msg.get("role") == "assistant" else msg.get("user_id", "unknown"))
         
         formatted_messages.append({
             "id": f"msg-{i}-{msg.get('timestamp', datetime.now().isoformat())}",
@@ -482,10 +527,7 @@ async def get_conversation(conversation_id: str):
             "metadata": msg.get("metadata", {})
         })
     
-    return {
-        "conversation_id": conversation_id,
-        "messages": formatted_messages
-    }
+    return {"conversation_id": conversation_id, "messages": formatted_messages}
 
 @app.get("/api/incidents")
 async def get_all_incidents(
@@ -495,18 +537,10 @@ async def get_all_incidents(
     """Get all incidents, optionally filtered by property or landlord"""
     all_incidents = list(incidents.values())
     
-    # Filter by property if provided
     if property_id:
         all_incidents = [i for i in all_incidents if i.get("property_id") == property_id]
     
-    # Filter by landlord if provided
-    # For now, return all incidents for any landlord (in production, check property ownership)
-    # Since we don't have property ownership data, we'll return all incidents
-    # In production, you'd filter: if landlord_id, only return incidents for properties owned by that landlord
-    
-    # Sort by created date (newest first)
     all_incidents.sort(key=lambda x: x.get("created_at", ""), reverse=True)
-    
     return {"incidents": all_incidents}
 
 @app.get("/api/incidents/{incident_id}")
@@ -545,84 +579,15 @@ async def create_calendar_event(event: CalendarEventRequest):
     return calendar_events[event_id]
 
 @app.get("/api/calendar/events")
-async def get_calendar_events(
-    property_id: Optional[str] = Query(None)
-):
+async def get_calendar_events(property_id: Optional[str] = Query(None)):
     """Get all calendar events, optionally filtered by property"""
     all_events = list(calendar_events.values())
     
     if property_id:
         all_events = [e for e in all_events if e.get("property_id") == property_id]
     
-    # Sort by start time
     all_events.sort(key=lambda x: x.get("start_time", ""))
-    
     return {"events": all_events}
-
-@app.get("/api/maintenance/predictions/{property_id}", response_model=MaintenancePredictionsResponse)
-async def get_maintenance_predictions(property_id: str):
-    """Get maintenance predictions for all assets in a property"""
-    try:
-        predictor = get_predictor()
-        print(f"Getting predictions for property: {property_id}")
-        predictions = predictor.predict_all_assets(property_id)
-        print(f"Found {len(predictions)} predictions for {property_id}")
-        
-        # Convert to response format
-        prediction_responses = [
-            MaintenancePredictionResponse(**pred) for pred in predictions
-        ]
-        
-        return MaintenancePredictionsResponse(
-            property_id=property_id,
-            predictions=prediction_responses
-        )
-    except Exception as e:
-        print(f"Error getting maintenance predictions for {property_id}: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/maintenance/predictions/{property_id}/{asset_id}", response_model=MaintenancePredictionResponse)
-async def get_asset_maintenance_prediction(property_id: str, asset_id: str):
-    """Get maintenance prediction for a specific asset"""
-    try:
-        predictor = get_predictor()
-        prediction = predictor.predict_next_maintenance(property_id, asset_id)
-        
-        return MaintenancePredictionResponse(**prediction)
-    except Exception as e:
-        print(f"Error getting asset maintenance prediction: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/maintenance/record")
-async def add_maintenance_record(
-    property_id: str = Query(...),
-    asset_id: str = Query(...),
-    asset_name: str = Query(...),
-    asset_type: str = Query(...),
-    maintenance_date: str = Query(...),
-    maintenance_type: str = Query("maintenance")
-):
-    """Add a maintenance record to the history"""
-    try:
-        predictor = get_predictor()
-        success = predictor.add_maintenance_record(
-            property_id=property_id,
-            asset_id=asset_id,
-            asset_name=asset_name,
-            asset_type=asset_type,
-            maintenance_date=maintenance_date,
-            maintenance_type=maintenance_type
-        )
-        
-        if success:
-            return {"status": "success", "message": "Maintenance record added"}
-        else:
-            raise HTTPException(status_code=400, detail="Failed to add maintenance record")
-    except Exception as e:
-        print(f"Error adding maintenance record: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

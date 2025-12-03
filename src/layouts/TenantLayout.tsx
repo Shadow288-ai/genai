@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Routes, Route, NavLink, useNavigate } from "react-router-dom";
 import type { User } from "../types";
 import TenantHome from "../pages/tenant/TenantHome";
@@ -14,6 +14,7 @@ interface TenantLayoutProps {
 
 const TenantLayout: React.FC<TenantLayoutProps> = ({ user, onLogout }) => {
   const navigate = useNavigate();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
     onLogout();
@@ -25,31 +26,47 @@ const TenantLayout: React.FC<TenantLayoutProps> = ({ user, onLogout }) => {
       <header className="app-header">
         <div className="header-content">
           <Logo size={32} className="app-logo" />
-          <nav className="main-nav">
-            <NavLink to="/tenant/home" className={({ isActive }) => (isActive ? "active" : "")}>
+          <button 
+            className="mobile-menu-toggle"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle menu"
+          >
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
+          <nav className={`main-nav ${mobileMenuOpen ? "mobile-open" : ""}`}>
+            <NavLink 
+              to="/tenant/home" 
+              className={({ isActive }) => (isActive ? "active" : "")}
+              onClick={() => setMobileMenuOpen(false)}
+            >
               Home
             </NavLink>
             <NavLink
               to="/tenant/messages"
               className={({ isActive }) => (isActive ? "active" : "")}
+              onClick={() => setMobileMenuOpen(false)}
             >
               Messages
             </NavLink>
             <NavLink
               to="/tenant/visits"
               className={({ isActive }) => (isActive ? "active" : "")}
+              onClick={() => setMobileMenuOpen(false)}
             >
               Visits
             </NavLink>
             <NavLink
               to="/tenant/profile"
               className={({ isActive }) => (isActive ? "active" : "")}
+              onClick={() => setMobileMenuOpen(false)}
             >
               Profile
             </NavLink>
           </nav>
           <div className="header-user">
-            <span>{user.name}</span>
+            <span className="header-user-name">{user.name}</span>
             <button className="btn-secondary btn-sm" onClick={handleLogout}>
               Logout
             </button>

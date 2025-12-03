@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Routes, Route, NavLink, useNavigate } from "react-router-dom";
 import type { User } from "../types";
 import LandlordDashboard from "../pages/landlord/LandlordDashboard";
@@ -15,6 +15,7 @@ interface LandlordLayoutProps {
 
 const LandlordLayout: React.FC<LandlordLayoutProps> = ({ user, onLogout }) => {
   const navigate = useNavigate();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = () => {
     onLogout();
@@ -26,40 +27,54 @@ const LandlordLayout: React.FC<LandlordLayoutProps> = ({ user, onLogout }) => {
       <header className="app-header">
         <div className="header-content">
           <Logo size={32} className="app-logo" />
-          <nav className="main-nav">
+          <button 
+            className="mobile-menu-toggle"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle menu"
+          >
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
+          <nav className={`main-nav ${mobileMenuOpen ? "mobile-open" : ""}`}>
             <NavLink
               to="/landlord/dashboard"
               className={({ isActive }) => (isActive ? "active" : "")}
+              onClick={() => setMobileMenuOpen(false)}
             >
               Dashboard
             </NavLink>
             <NavLink
               to="/landlord/properties"
               className={({ isActive }) => (isActive ? "active" : "")}
+              onClick={() => setMobileMenuOpen(false)}
             >
               Properties
             </NavLink>
             <NavLink
               to="/landlord/inbox"
               className={({ isActive }) => (isActive ? "active" : "")}
+              onClick={() => setMobileMenuOpen(false)}
             >
               Inbox
             </NavLink>
             <NavLink
               to="/landlord/calendar"
               className={({ isActive }) => (isActive ? "active" : "")}
+              onClick={() => setMobileMenuOpen(false)}
             >
               Calendar
             </NavLink>
             <NavLink
               to="/landlord/maintenance"
               className={({ isActive }) => (isActive ? "active" : "")}
+              onClick={() => setMobileMenuOpen(false)}
             >
               Maintenance
             </NavLink>
           </nav>
           <div className="header-user">
-            <span>{user.name}</span>
+            <span className="header-user-name">{user.name}</span>
             <button className="btn-secondary btn-sm" onClick={handleLogout}>
               Logout
             </button>

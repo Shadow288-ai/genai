@@ -297,7 +297,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   {message.metadata?.incidentId && message.metadata?.incidentDetails && (
                     <div className="incident-card">
                       <div className="incident-card-header">
-                        <div className="incident-card-icon">🎫</div>
+                        <div className="incident-card-icon">🔧</div>
                         <div>
                           <h4>Maintenance Ticket Created</h4>
                           <p className="text-muted">Your landlord has been notified</p>

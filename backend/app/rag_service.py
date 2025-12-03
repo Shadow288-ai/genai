@@ -1,7 +1,10 @@
 """
 RAG Service using LangChain, Ollama, and FAISS
+Simplified version maintaining all functionality
 """
 import os
+import json
+import re
 from typing import List, Optional, Tuple
 from pathlib import Path
 
@@ -9,13 +12,9 @@ from langchain_community.llms import Ollama
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.output_parsers import StrOutputParser
 
-class RAGService:
-    # Master prompt that defines the AI assistant's role and behavior
-    MASTER_PROMPT = """You are a helpful property assistant AI designed to help tenants with their property-related questions and issues.
+# Master prompt that defines the AI assistant's role and behavior
+MASTER_PROMPT = """You are a helpful property assistant AI designed to help tenants with their property-related questions and issues.
 
 === YOUR CORE ROLE ===
 You are a friendly, knowledgeable assistant that helps tenants understand how to use property features and diagnose issues. You are NOT a repair technician - your job is to help tenants check things, not fix them.
@@ -72,57 +71,28 @@ You are a friendly, knowledgeable assistant that helps tenants understand how to
 
 Remember: Your primary goal is to help tenants use their property effectively and diagnose issues safely, while always escalating actual repairs to the landlord."""
 
+class RAGService:
     def __init__(self, model_name: str = "mistral", embedding_model: str = "all-MiniLM-L6-v2"):
-        """
-        Initialize RAG service with Ollama LLM and sentence-transformers embeddings
-        
-        Args:
-            model_name: Ollama model name (llama3, mistral, phi3)
-            embedding_model: HuggingFace embedding model name
-        """
+        """Initialize RAG service with Ollama LLM and sentence-transformers embeddings"""
         self.model_name = model_name
-        self.embedding_model = embedding_model
+        self.embeddings = HuggingFaceEmbeddings(model_name=embedding_model, model_kwargs={'device': 'cpu'})
+        self.vector_stores: dict[str, FAISS] = {}
+        self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50, length_function=len)
         
-        # Initialize embeddings
-        print(f"Loading embedding model: {embedding_model}...")
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name=embedding_model,
-            model_kwargs={'device': 'cpu'}
-        )
-        
-        # Initialize LLM via Ollama
+        # Initialize LLM
         print(f"Connecting to Ollama model: {model_name}...")
         try:
             self.llm = Ollama(model=model_name, base_url="http://localhost:11434")
-            # Test connection with a simple query
-            test_response = self.llm.invoke("test")
+            self.llm.invoke("test")  # Test connection
             print(f"✓ Connected to Ollama ({model_name})")
-            print(f"  Test response: {test_response[:50] if test_response else 'empty'}...")
         except Exception as e:
             print(f"⚠ Warning: Could not connect to Ollama: {e}")
-            print("  Make sure Ollama is running: ollama serve")
+            print(f"  Make sure Ollama is running: ollama serve")
             print(f"  And model is pulled: ollama pull {model_name}")
-            print(f"  Test with: ollama run {model_name}")
             self.llm = None
-        
-        # Vector stores per property
-        self.vector_stores: dict[str, FAISS] = {}
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=500,
-            chunk_overlap=50,
-            length_function=len
-        )
     
     def load_documents_from_file(self, file_path: str) -> str:
-        """
-        Load text content from a file
-        
-        Args:
-            file_path: Path to text file
-            
-        Returns:
-            File content as string
-        """
+        """Load text content from a file"""
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return f.read()
@@ -131,69 +101,43 @@ Remember: Your primary goal is to help tenants use their property effectively an
             return ""
     
     def add_property_documents(self, property_id: str, documents: List[str]) -> None:
-        """
-        Add documents for a property and build vector store
-        
-        Args:
-            property_id: Property identifier
-            documents: List of text documents (house manual, etc.)
-        """
+        """Add documents for a property and build vector store"""
         if not documents:
             return
-            
+        
         # Split documents into chunks
         texts = []
         for doc in documents:
-            chunks = self.text_splitter.split_text(doc)
-            texts.extend(chunks)
+            texts.extend(self.text_splitter.split_text(doc))
         
         if not texts:
             return
         
         # Create vector store
         try:
-            vectorstore = FAISS.from_texts(texts, embedding=self.embeddings)
-            self.vector_stores[property_id] = vectorstore
+            self.vector_stores[property_id] = FAISS.from_texts(texts, embedding=self.embeddings)
             print(f"✓ Created vector store for property {property_id} with {len(texts)} chunks")
         except Exception as e:
             print(f"Error creating vector store: {e}")
     
     def query(self, property_id: str, question: str, top_k: int = 8) -> Tuple[str, List[str]]:
-        """
-        Query RAG system for a property with intelligent fallback
-        
-        Args:
-            property_id: Property identifier
-            question: User question
-            top_k: Number of chunks to retrieve
-            
-        Returns:
-            Tuple of (answer, source_chunks)
-        """
+        """Query RAG system for a property with intelligent fallback"""
         if not self.llm:
-            print(f"⚠ RAG query attempted but Ollama is not connected (property: {property_id}, question: {question[:50]}...)")
             return "I'm currently unavailable. Please contact your landlord directly.", []
         
-        # Check for subjects that need roasts (macOS, etc.)
+        # Check for macOS roasts
         question_lower = question.lower()
-        macos_keywords = ["macos", "mac os", "macbook", "apple", "mac computer"]
-        if any(keyword in question_lower for keyword in macos_keywords):
-            return self._generate_roast_response("macOS", question)
+        if any(kw in question_lower for kw in ["macos", "mac os", "macbook", "apple", "mac computer"]):
+            return self._generate_roast(question)
         
         # Get vector store for property
         vectorstore = self.vector_stores.get(property_id)
         if not vectorstore:
-            # No vector store - try common knowledge
-            print(f"⚠ No vector store found for property {property_id}, using common knowledge")
-            return self._answer_with_common_knowledge(question)
-        
-        # Create retriever with similarity search
-        # Increase k to get more context
-        retriever = vectorstore.as_retriever(search_kwargs={"k": top_k})
+            return self._answer_with_llm(question, "You don't have specific property information available, but you can help using general knowledge.")
         
         # Retrieve relevant chunks
         try:
-            # Use invoke for newer LangChain versions, fallback to get_relevant_documents
+            retriever = vectorstore.as_retriever(search_kwargs={"k": top_k})
             try:
                 docs = retriever.invoke(question)
             except AttributeError:
@@ -202,32 +146,22 @@ Remember: Your primary goal is to help tenants use their property effectively an
             context_chunks = [doc.page_content for doc in docs]
             context_text = "\n\n---\n\n".join(context_chunks)
             
-            # Debug: print what we retrieved (only in verbose mode)
-            # print(f"DEBUG: Retrieved {len(context_chunks)} chunks for question: '{question}'")
-            # if context_chunks:
-            #     print(f"DEBUG: First chunk preview: {context_chunks[0][:150]}...")
-            
-            # Check if we have relevant context - be more lenient
-            has_relevant_context = len(context_chunks) > 0 and len(context_text.strip()) > 20
-            
-            # Also check if any chunk contains keywords from the question
-            question_lower = question.lower()
-            question_keywords = [w for w in question_lower.split() if len(w) > 3]  # Words longer than 3 chars
-            has_keyword_match = any(
-                any(keyword in chunk.lower() for keyword in question_keywords)
-                for chunk in context_chunks
+            # Check if we have relevant context
+            question_keywords = [w for w in question_lower.split() if len(w) > 3]
+            has_relevant_context = (
+                len(context_chunks) > 0 and 
+                len(context_text.strip()) > 20 and
+                any(any(kw in chunk.lower() for kw in question_keywords) for chunk in context_chunks)
             )
             
-            if has_relevant_context or has_keyword_match:
+            if has_relevant_context:
                 # Use RAG with property-specific context
-                prompt_template = PromptTemplate(
-                    input_variables=["context", "question"],
-                    template=self.MASTER_PROMPT + """
+                prompt = f"""{MASTER_PROMPT}
 
 === CURRENT CONTEXT ===
 Use the following property-specific information to answer the question:
 
-{context}
+{context_text}
 
 === USER QUESTION ===
 {question}
@@ -236,127 +170,43 @@ Use the following property-specific information to answer the question:
 Based on the master prompt guidelines above and the context provided, answer the question concisely and helpfully. Remember: help diagnose, don't repair. If repairs are needed, the system will handle escalation automatically.
 
 Your answer:"""
-                )
                 
-                # Format prompt directly (simpler and more reliable)
-                prompt = prompt_template.format(context=context_text, question=question)
-                print(f"✓ Using RAG with {len(context_chunks)} context chunks for property {property_id}")
                 answer = self.llm.invoke(prompt)
-                print(f"✓ RAG query completed successfully (answer length: {len(answer)} chars)")
                 
-                # Check if answer contains repair instructions (action verbs that suggest physical repairs)
-                # Only flag if these appear as direct instructions, not just mentions
+                # Check for repair instructions and redirect if found
                 repair_patterns = [
-                    "replace the", "replace a", "replace your",
-                    "tighten the", "tighten a", "tighten your",
-                    "screw the", "screw a", "screw your",
-                    "wire the", "wire a", "rewire",
-                    "repair the", "repair a", "repair your",
-                    "fix the", "fix a", "fix your",
-                    "install the", "install a", "install your",
-                    "disassemble", "take apart", "remove and replace"
+                    "replace the", "tighten the", "screw the", "wire the", "repair the",
+                    "fix the", "install the", "disassemble", "take apart"
                 ]
-                answer_lower = answer.lower()
-                contains_repair_instruction = any(pattern in answer_lower for pattern in repair_patterns)
+                if any(pattern in answer.lower() for pattern in repair_patterns):
+                    answer = """I can help you check a few things, but if repairs are needed, I'll need to escalate this to your landlord.
+
+Can you check:
+- Is the device plugged in and powered on?
+- Are there any visible signs of damage?
+- Is there an error message or indicator light?
+
+If the issue persists after checking these, I'll create a maintenance ticket for your landlord to handle the repair."""
                 
-                if contains_repair_instruction:
-                    # If repair instructions detected, provide diagnostic help instead
-                    answer = "I can help you check a few things, but if repairs are needed, I'll need to escalate this to your landlord.\n\n" + \
-                             "Can you check:\n" + \
-                             "- Is the device plugged in and powered on?\n" + \
-                             "- Are there any visible signs of damage?\n" + \
-                             "- Is there an error message or indicator light?\n\n" + \
-                             "If the issue persists after checking these, I'll create a maintenance ticket for your landlord to handle the repair."
-                
-                # Extract sources
                 sources = [chunk[:200] + "..." if len(chunk) > 200 else chunk for chunk in context_chunks[:3]]
-                
                 return answer.strip(), sources
             else:
-                # No relevant context found - try common knowledge, then escalation
-                return self._answer_with_fallback(question)
+                # No relevant context - use general knowledge
+                return self._answer_with_llm(question, "You couldn't find specific information about this property, but you can try to help using general knowledge.")
                 
         except Exception as e:
             print(f"Error in RAG query: {e}")
-            return self._answer_with_fallback(question)
+            return self._answer_with_llm(question, "You couldn't find specific information about this property, but you can try to help using general knowledge.")
     
-    def _generate_roast_response(self, subject: str, question: str) -> Tuple[str, List[str]]:
-        """
-        Generate a humorous roast response using LLM in the style of the example roasts
-        """
-        if not self.llm:
-            return f"{subject}? I don't have much to say about that right now.", []
-        
-        style_examples = """Here are examples of the style of roasts to use:
-- "macOS is here the same way a broken lamp is here — physically present, zero utility."
-- "If laziness were a sport, macOS would still come in last."
-- "He wants to climb K2? He can't even climb out of bed before noon."
-- "Even the houseplants contribute more than macOS."
-- "He's a placeholder the way a crash screen is a feature."
-- "If effort were measured in bytes, macOS would be running on empty."
-- "He's the only guy who could hold a ladder for K2 and still mess it up."
-"""
-
-        prompt = f"""Generate a humorous roast about {subject} in the exact style of these examples:
-
-{style_examples}
-
-The roast should:
-- Be witty and humorous
-- Use creative comparisons and metaphors
-- Be concise (1-2 sentences max)
-- Playfully criticize {subject} as unnecessary or ineffective
-- Match the tone and style of the examples above
-
-Question asked: "{question}"
-
-Generate ONE roast in this style:"""
-
-        try:
-            roast = self.llm.invoke(prompt)
-            return roast.strip(), []
-        except Exception as e:
-            print(f"Error generating roast: {e}")
-            return f"{subject}? Yeah, that's a thing.", []
-    
-    def _answer_with_common_knowledge(self, question: str) -> Tuple[str, List[str]]:
-        """
-        Answer using common knowledge when no property-specific context is available
-        """
+    def _answer_with_llm(self, question: str, situation: str) -> Tuple[str, List[str]]:
+        """Answer using LLM with given situation context"""
         if not self.llm:
             return self._escalation_message(), []
         
-        prompt = self.MASTER_PROMPT + f"""
+        prompt = f"""{MASTER_PROMPT}
 
 === CURRENT SITUATION ===
-You don't have specific property information available, but you can help using general knowledge.
-
-=== USER QUESTION ===
-"{question}"
-
-=== YOUR RESPONSE ===
-Based on the master prompt guidelines above, answer using general knowledge about household appliances, property maintenance, or rental procedures. If you can't answer confidently, politely say you don't have that information and offer to escalate to the landlord.
-
-Your response:"""
-
-        try:
-            answer = self.llm.invoke(prompt)
-            return answer.strip(), []
-        except Exception as e:
-            print(f"Error in common knowledge answer: {e}")
-            return self._escalation_message(), []
-    
-    def _answer_with_fallback(self, question: str) -> Tuple[str, List[str]]:
-        """
-        Fallback: Try common knowledge, then offer escalation
-        """
-        if not self.llm:
-            return self._escalation_message(), []
-        
-        prompt = self.MASTER_PROMPT + f"""
-
-=== CURRENT SITUATION ===
-You couldn't find specific information about this property, but you can try to help using general knowledge.
+{situation}
 
 === USER QUESTION ===
 "{question}"
@@ -368,13 +218,49 @@ Your response:"""
 
         try:
             answer = self.llm.invoke(prompt)
-            # Ensure escalation is offered if answer seems uncertain
             if "landlord" not in answer.lower() and "escalate" not in answer.lower():
                 answer += "\n\nIf you need more specific information, I can escalate this to your landlord. Would you like me to do that?"
             return answer.strip(), []
         except Exception as e:
-            print(f"Error in fallback answer: {e}")
+            print(f"Error in LLM answer: {e}")
             return self._escalation_message(), []
+    
+    def _generate_roast(self, question: str) -> Tuple[str, List[str]]:
+        """Generate a humorous roast response for macOS questions"""
+        if not self.llm:
+            return "macOS? I don't have much to say about that right now.", []
+        
+        style_examples = """Here are examples of the style of roasts to use:
+- "macOS is here the same way a broken lamp is here — physically present, zero utility."
+- "If laziness were a sport, macOS would still come in last."
+- "He wants to climb K2? He can't even climb out of bed before noon."
+- "Even the houseplants contribute more than macOS."
+- "He's a placeholder the way a crash screen is a feature."
+- "If effort were measured in bytes, macOS would be running on empty."
+- "He's the only guy who could hold a ladder for K2 and still mess it up."
+"""
+
+        prompt = f"""Generate a humorous roast about macOS in the exact style of these examples:
+
+{style_examples}
+
+The roast should:
+- Be witty and humorous
+- Use creative comparisons and metaphors
+- Be concise (1-2 sentences max)
+- Playfully criticize macOS as unnecessary or ineffective
+- Match the tone and style of the examples above
+
+Question asked: "{question}"
+
+Generate ONE roast in this style:"""
+
+        try:
+            roast = self.llm.invoke(prompt)
+            return roast.strip(), []
+        except Exception as e:
+            print(f"Error generating roast: {e}")
+            return "macOS? Yeah, that's a thing.", []
     
     def _escalation_message(self) -> str:
         """Default escalation message"""
@@ -383,21 +269,11 @@ Your response:"""
 Just let me know if you'd like me to contact them, or you can reach out directly using the chat feature."""
     
     def general_conversation(self, message: str, user_role: str = "TENANT") -> str:
-        """
-        Handle general conversational messages (greetings, casual chat, etc.)
-        Not property-specific, just friendly conversation
-        
-        Args:
-            message: User's message
-            user_role: Role of the user (TENANT or LANDLORD)
-            
-        Returns:
-            Conversational response
-        """
+        """Handle general conversational messages (greetings, casual chat, etc.)"""
         if not self.llm:
             return "Hello! I'm here to help. How can I assist you today?"
         
-        prompt = self.MASTER_PROMPT + f"""
+        prompt = f"""{MASTER_PROMPT}
 
 === CURRENT SITUATION ===
 The user has sent a general message (not a specific question about the property, and not reporting an issue). This could be a greeting, casual conversation, or general inquiry.
@@ -414,36 +290,21 @@ Respond naturally and conversationally. Be friendly, helpful, and brief. If it's
 Your response:"""
 
         try:
-            answer = self.llm.invoke(prompt)
-            return answer.strip()
+            return self.llm.invoke(prompt).strip()
         except Exception as e:
             print(f"Error in general conversation: {e}")
-            # Fallback to friendly responses
+            # Fallback responses
             message_lower = message.lower().strip()
-            if any(greeting in message_lower for greeting in ["hello", "hi", "hey", "good morning", "good afternoon", "good evening"]):
+            if any(g in message_lower for g in ["hello", "hi", "hey", "good morning", "good afternoon", "good evening"]):
                 return "Hello! How can I help you today?"
-            elif any(thanks in message_lower for thanks in ["thank", "thanks", "appreciate"]):
+            elif any(t in message_lower for t in ["thank", "thanks", "appreciate"]):
                 return "You're welcome! Is there anything else I can help with?"
-            else:
-                return "I'm here to help! What can I do for you today?"
+            return "I'm here to help! What can I do for you today?"
 
     def triage_issue(self, description: str) -> dict:
-        """
-        Use LLM to triage an issue from tenant description
-        
-        Args:
-            description: Issue description from tenant
-            
-        Returns:
-            Dict with category, severity, suggested_actions, confidence
-        """
+        """Use LLM to triage an issue from tenant description"""
         if not self.llm:
-            return {
-                "category": "OTHER",
-                "severity": "medium",
-                "suggested_actions": ["Contact landlord for assistance"],
-                "confidence": 0.5
-            }
+            return self._triage_fallback(description)
         
         prompt = f"""Analyze this tenant issue report and classify it.
 
@@ -461,78 +322,52 @@ Only respond with valid JSON, no other text:"""
 
         try:
             response = self.llm.invoke(prompt)
-            # Try to extract JSON from response
-            import json
-            import re
-            
-            # Find JSON in response
             json_match = re.search(r'\{[^}]+\}', response, re.DOTALL)
             if json_match:
-                result = json.loads(json_match.group())
-                return result
-            else:
-                # Fallback parsing
-                return self._parse_triage_fallback(response, description)
+                return json.loads(json_match.group())
         except Exception as e:
             print(f"Error in issue triage: {e}")
-            return {
-                "category": "OTHER",
-                "severity": "medium",
-                "suggested_actions": ["Contact landlord"],
-                "confidence": 0.3
-            }
-    
-    def _parse_triage_fallback(self, response: str, description: str) -> dict:
-        """Fallback parser if JSON parsing fails"""
-        description_lower = description.lower()
         
-        # Simple keyword-based classification
+        return self._triage_fallback(description)
+    
+    def _triage_fallback(self, description: str) -> dict:
+        """Fallback parser if JSON parsing fails"""
+        desc_lower = description.lower()
+        
+        # Category detection
         category = "OTHER"
-        if any(word in description_lower for word in ["ac", "air conditioning", "cooling", "air conditioner"]):
+        if any(w in desc_lower for w in ["ac", "air conditioning", "cooling"]):
             category = "AC"
-        elif any(word in description_lower for word in ["heat", "heater", "heating", "warm"]):
+        elif any(w in desc_lower for w in ["heat", "heater", "heating", "warm"]):
             category = "HEATER"
-        elif any(word in description_lower for word in ["light", "lamp", "bulb", "flicker"]):
+        elif any(w in desc_lower for w in ["light", "lamp", "bulb", "flicker"]):
             category = "LIGHTS"
-        elif any(word in description_lower for word in ["water", "leak", "pipe", "faucet", "toilet"]):
+        elif any(w in desc_lower for w in ["water", "leak", "pipe", "faucet", "toilet"]):
             category = "PLUMBING"
-        elif any(word in description_lower for word in ["wifi", "internet", "router", "network"]):
+        elif any(w in desc_lower for w in ["wifi", "internet", "router", "network"]):
             category = "ROUTER"
-        elif any(word in description_lower for word in ["appliance", "oven", "washer", "dryer", "dishwasher"]):
+        elif any(w in desc_lower for w in ["appliance", "oven", "washer", "dryer", "dishwasher"]):
             category = "APPLIANCES"
         
-        # Severity based on keywords
+        # Severity detection
         severity = "medium"
-        if any(word in description_lower for word in ["urgent", "emergency", "broken", "not working", "won't"]):
+        if any(w in desc_lower for w in ["urgent", "emergency", "broken", "not working", "won't"]):
             severity = "high"
-        elif any(word in description_lower for word in ["sometimes", "occasionally", "minor", "small"]):
+        elif any(w in desc_lower for w in ["sometimes", "occasionally", "minor", "small"]):
             severity = "low"
         
         return {
             "category": category,
             "severity": severity,
-            "suggested_actions": [
-                "Schedule inspection",
-                "Contact tenant for more details"
-            ],
+            "suggested_actions": ["Schedule inspection", "Contact tenant for more details"],
             "confidence": 0.6
         }
     
     def suggest_reply(self, context: List[dict], tone: str = "professional") -> str:
-        """
-        Suggest a reply for landlord based on conversation context
-        
-        Args:
-            context: List of previous messages
-            tone: professional, friendly, or apologetic
-            
-        Returns:
-            Suggested reply text
-        """
+        """Suggest a reply for landlord based on conversation context"""
         if not self.llm:
             return "Thank you for your message. I'll get back to you soon."
         
-        # Format context
         context_text = "\n".join([
             f"{msg.get('role', 'user')}: {msg.get('content', '')}"
             for msg in context[-5:]  # Last 5 messages
@@ -545,8 +380,7 @@ Only respond with valid JSON, no other text:"""
 Generate a brief, {tone} reply (2-3 sentences max). Be helpful and clear:"""
 
         try:
-            response = self.llm.invoke(prompt)
-            return response.strip()
+            return self.llm.invoke(prompt).strip()
         except Exception as e:
             print(f"Error generating reply suggestion: {e}")
             return "Thank you for your message. I'll get back to you soon."

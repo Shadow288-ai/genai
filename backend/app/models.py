@@ -81,19 +81,3 @@ class CalendarEventResponse(BaseModel):
     description: Optional[str] = None
     is_ai_suggested: Optional[bool] = False
 
-class MaintenancePredictionResponse(BaseModel):
-    asset_id: str
-    asset_name: str
-    asset_type: str
-    predicted_date: str
-    confidence: float
-    days_until: int
-    reasoning: str
-    last_maintenance: Optional[str] = None
-    average_interval_days: float
-    maintenance_count: int
-
-class MaintenancePredictionsResponse(BaseModel):
-    property_id: str
-    predictions: List[MaintenancePredictionResponse]
-
