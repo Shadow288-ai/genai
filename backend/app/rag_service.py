@@ -118,7 +118,7 @@ class RAGService:
         except Exception as e:
             print(f"Error creating vector store: {e}")
     
-    def query(self, property_id: str, question: str, top_k: int = 8) -> Tuple[str, List[str]]:
+    def query(self, property_id: str, question: str, top_k: int = 8, conversation_history: List[dict] = None) -> Tuple[str, List[str]]:
         """Query RAG system for a property with intelligent fallback"""
         if not self.llm:
             return "I'm currently unavailable. Please contact your landlord directly.", []
@@ -131,7 +131,7 @@ class RAGService:
         # Get vector store for property
         vectorstore = self.vector_stores.get(property_id)
         if not vectorstore:
-            return self._answer_with_llm(question, "You don't have specific property information available, but you can help using general knowledge.")
+            return self._answer_with_llm(question, "You don't have specific property information available, but you can help using general knowledge.", conversation_history)
         
         # Retrieve relevant chunks
         try:
@@ -153,19 +153,33 @@ class RAGService:
             )
             
             if has_relevant_context:
+                # Build conversation history context
+                history_text = ""
+                if conversation_history:
+                    history_msgs = []
+                    for msg in conversation_history[-3:]:  # Last 3 messages
+                        role = msg.get("role", "user")
+                        content = msg.get("content", "")
+                        sender_type = msg.get("sender_type", "TENANT")
+                        if role == "user" or sender_type == "TENANT":
+                            history_msgs.append(f"Tenant: {content}")
+                        elif role == "assistant" or sender_type == "AI":
+                            history_msgs.append(f"Assistant: {content}")
+                    if history_msgs:
+                        history_text = f"\n\n=== RECENT CONVERSATION ===\n" + "\n".join(history_msgs) + "\n"
+                
                 # Use RAG with property-specific context
                 prompt = f"""{MASTER_PROMPT}
 
 === CURRENT CONTEXT ===
 Use the following property-specific information to answer the question:
 
-{context_text}
-
+{context_text}{history_text}
 === USER QUESTION ===
 {question}
 
 === YOUR RESPONSE ===
-Based on the master prompt guidelines above and the context provided, answer the question concisely and helpfully. Remember: help diagnose, don't repair. If repairs are needed, the system will handle escalation automatically.
+Based on the master prompt guidelines above and the context provided, answer the question concisely and helpfully. Remember: help diagnose, don't repair. If repairs are needed, the system will handle escalation automatically.{" Use the recent conversation context to understand what the user is referring to." if history_text else ""}
 
 Your answer:"""
                 
@@ -190,27 +204,41 @@ If the issue persists after checking these, I'll create a maintenance ticket for
                 return answer.strip(), sources
             else:
                 # No relevant context - use general knowledge
-                return self._answer_with_llm(question, "You couldn't find specific information about this property, but you can try to help using general knowledge.")
+                return self._answer_with_llm(question, "You couldn't find specific information about this property, but you can try to help using general knowledge.", conversation_history)
                 
         except Exception as e:
             print(f"Error in RAG query: {e}")
-            return self._answer_with_llm(question, "You couldn't find specific information about this property, but you can try to help using general knowledge.")
+            return self._answer_with_llm(question, "You couldn't find specific information about this property, but you can try to help using general knowledge.", conversation_history)
     
-    def _answer_with_llm(self, question: str, situation: str) -> Tuple[str, List[str]]:
+    def _answer_with_llm(self, question: str, situation: str, conversation_history: List[dict] = None) -> Tuple[str, List[str]]:
         """Answer using LLM with given situation context"""
         if not self.llm:
             return self._escalation_message(), []
         
+        # Build conversation history context
+        history_text = ""
+        if conversation_history:
+            history_msgs = []
+            for msg in conversation_history[-3:]:  # Last 3 messages
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                sender_type = msg.get("sender_type", "TENANT")
+                if role == "user" or sender_type == "TENANT":
+                    history_msgs.append(f"Tenant: {content}")
+                elif role == "assistant" or sender_type == "AI":
+                    history_msgs.append(f"Assistant: {content}")
+            if history_msgs:
+                history_text = f"\n\n=== RECENT CONVERSATION ===\n" + "\n".join(history_msgs) + "\n"
+        
         prompt = f"""{MASTER_PROMPT}
 
 === CURRENT SITUATION ===
-{situation}
-
+{situation}{history_text}
 === USER QUESTION ===
 "{question}"
 
 === YOUR RESPONSE ===
-Based on the master prompt guidelines above, try to answer using general knowledge about household appliances, property maintenance, or rental procedures. If you can provide a helpful general answer, do so briefly. If the question is too specific or you're not confident, politely say you don't have that information and offer to escalate to the landlord.
+Based on the master prompt guidelines above, try to answer using general knowledge about household appliances, property maintenance, or rental procedures. If you can provide a helpful general answer, do so briefly. If the question is too specific or you're not confident, politely say you don't have that information and offer to escalate to the landlord.{" Use the recent conversation context to understand what the user is referring to." if history_text else ""}
 
 Your response:"""
 
@@ -266,16 +294,30 @@ Generate ONE roast in this style:"""
 
 Just let me know if you'd like me to contact them, or you can reach out directly using the chat feature."""
     
-    def general_conversation(self, message: str, user_role: str = "TENANT") -> str:
+    def general_conversation(self, message: str, user_role: str = "TENANT", conversation_history: List[dict] = None) -> str:
         """Handle general conversational messages (greetings, casual chat, etc.)"""
         if not self.llm:
             return "Hello! I'm here to help. How can I assist you today?"
         
+        # Build conversation history context
+        history_text = ""
+        if conversation_history:
+            history_msgs = []
+            for msg in conversation_history[-3:]:  # Last 3 messages
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                sender_type = msg.get("sender_type", "TENANT")
+                if role == "user" or sender_type == "TENANT":
+                    history_msgs.append(f"Tenant: {content}")
+                elif role == "assistant" or sender_type == "AI":
+                    history_msgs.append(f"Assistant: {content}")
+            if history_msgs:
+                history_text = f"\n\n=== RECENT CONVERSATION ===\n" + "\n".join(history_msgs) + "\n"
+        
         prompt = f"""{MASTER_PROMPT}
 
 === CURRENT SITUATION ===
-The user has sent a general message (not a specific question about the property, and not reporting an issue). This could be a greeting, casual conversation, or general inquiry.
-
+The user has sent a general message (not a specific question about the property, and not reporting an issue). This could be a greeting, casual conversation, or general inquiry.{history_text}
 === USER MESSAGE ===
 "{message}"
 
@@ -283,7 +325,7 @@ The user has sent a general message (not a specific question about the property,
 {user_role}
 
 === YOUR RESPONSE ===
-Respond naturally and conversationally. Be friendly, helpful, and brief. If it's a greeting, greet them back warmly. If they're just chatting, engage naturally. If they seem to need help but aren't being specific, gently ask how you can assist them. Keep it short (1-3 sentences max) and don't mention property manuals or technical details unless they ask.
+Respond naturally and conversationally. Be friendly, helpful, and brief. If it's a greeting, greet them back warmly. If they're just chatting, engage naturally. If they seem to need help but aren't being specific, gently ask how you can assist them. Keep it short (1-3 sentences max) and don't mention property manuals or technical details unless they ask.{" Use the recent conversation context to understand what the user is referring to." if history_text else ""}
 
 Your response:"""
 

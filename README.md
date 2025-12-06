@@ -1,16 +1,14 @@
 # HomeGuard AI - Tenant-Landlord Communication Platform
 
-A comprehensive tenant-landlord communication app with AI-powered property assistant, predictive maintenance, and RAG-based house manual Q&A.
+A comprehensive tenant-landlord communication app with AI-powered property assistant, RAG-based house manual Q&A, and automated maintenance ticket management.
 
 ## Features
 
 - **Airbnb-style Chat Interface**: Real-time messaging between tenants and landlords
 - **AI Property Assistant**: RAG-powered Q&A using house manuals and property documents
 - **Issue Triage**: Automatic classification and severity assessment of maintenance issues
-- **Predictive Maintenance**: Risk scoring and AI-suggested maintenance windows
 - **Calendar Management**: Unified calendar for stays, maintenance, and AI suggestions
 - **Reply Suggestions**: AI-generated reply suggestions for landlords
-- **Multilingual Support**: (UI ready, backend integration pending)
 
 ## Tech Stack
 
@@ -18,7 +16,6 @@ A comprehensive tenant-landlord communication app with AI-powered property assis
 - React 19 + TypeScript
 - Vite
 - React Router
-- Airbnb-inspired modern UI
 
 ### Backend
 - FastAPI (Python)
@@ -27,56 +24,89 @@ A comprehensive tenant-landlord communication app with AI-powered property assis
 - Sentence Transformers (Embeddings - all-MiniLM-L6-v2)
 - FAISS (Vector database)
 
-## Quick Start
-
-### Prerequisites
+## Prerequisites
 
 1. **Node.js 18+** and **npm**
 2. **Python 3.10+**
 3. **Ollama** installed and running
 
-> **📖 New to Ollama?** See [INSTALL_OLLAMA.md](./INSTALL_OLLAMA.md) for detailed installation instructions.
-> 
-> **🚀 Quick setup?** See [QUICK_START.md](./QUICK_START.md) for step-by-step guide.
+## Installation & Setup
 
-### 1. Install Ollama
+### Step 1: Install Ollama
 
-Download from https://ollama.com and install.
-
-Then pull a model:
+**Mac:**
 ```bash
+brew install ollama
+# Or download from https://ollama.com
+```
+
+**Windows:**
+1. Go to https://ollama.com/download
+2. Download and run `OllamaSetup.exe`
+
+**Linux:**
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+### Step 2: Pull a Model
+
+```bash
+# Recommended (good balance):
 ollama pull llama3
-# Or for a lighter option:
+
+# Or for faster/smaller:
 ollama pull mistral
-# Or for testing:
+
+# Or for very small (testing):
 ollama pull phi3
 ```
 
-Verify it works:
+**Verify installation:**
 ```bash
-ollama run llama3
+ollama list
+ollama run llama3  # Test it works
 ```
 
-### 2. Setup Backend
+### Step 3: Start Ollama
+
+Ollama usually starts automatically. If not:
+```bash
+ollama serve
+```
+Keep this terminal open - Ollama needs to keep running.
+
+### Step 4: Setup Backend
 
 ```bash
 cd backend
 
 # Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python3 -m venv venv
+
+# Activate it
+# Mac/Linux:
+source venv/bin/activate
+# Windows:
+venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
 
 # Start backend server
 python -m app.main
-# Or: uvicorn app.main:app --reload --port 8000
 ```
 
 Backend will run on `http://localhost:8000`
 
-### 3. Setup Frontend
+**Test it:**
+```bash
+curl http://localhost:8000/health
+```
+
+### Step 5: Setup Frontend
+
+Open a **new terminal window**:
 
 ```bash
 # Install dependencies
@@ -88,7 +118,7 @@ npm run dev
 
 Frontend will run on `http://localhost:5173`
 
-### 4. Access the App
+### Step 6: Access the App
 
 Open `http://localhost:5173` in your browser.
 
@@ -96,58 +126,60 @@ Open `http://localhost:5173` in your browser.
 - **Landlord**: `landlord@example.com` / `admin123`
 - **Tenant**: `tenant@example.com` / `admin123`
 
+## Running the Project
+
+You need **3 terminal windows** running:
+
+1. **Terminal 1**: Ollama
+   ```bash
+   ollama serve
+   ```
+
+2. **Terminal 2**: Backend
+   ```bash
+   cd backend
+   source venv/bin/activate  # Mac/Linux
+   python -m app.main
+   ```
+
+3. **Terminal 3**: Frontend
+   ```bash
+   npm run dev
+   ```
+
 ## Project Structure
 
 ```
 ├── backend/
 │   ├── app/
-│   │   ├── __init__.py
 │   │   ├── main.py          # FastAPI app
 │   │   ├── rag_service.py   # RAG pipeline
 │   │   └── models.py        # Pydantic models
-│   ├── requirements.txt
-│   └── README.md
+│   └── data/
+│       └── house_manuals/   # Property manuals
 ├── src/
-│   ├── components/
-│   │   └── chat/
-│   │       └── ChatInterface.tsx
-│   ├── pages/
-│   │   ├── tenant/          # Tenant views
-│   │   └── landlord/        # Landlord views
-│   ├── services/
-│   │   ├── api.ts           # API client
-│   │   └── mockData.ts      # Mock data
-│   └── types.ts
+│   ├── components/          # React components
+│   ├── pages/               # Page components
+│   ├── services/            # API client & mock data
+│   └── types.ts             # TypeScript types
 └── README.md
 ```
-
-## API Endpoints
-
-- `GET /health` - Health check
-- `POST /api/chat` - Main chat endpoint (RAG + triage)
-- `POST /api/rag/query` - Direct RAG query
-- `POST /api/triage` - Issue triage
-- `POST /api/suggest-reply` - Reply suggestion
-- `GET /api/conversations/{id}` - Get conversation
-- `GET /api/incidents/{id}` - Get incident
 
 ## Configuration
 
 ### Backend Model Selection
 
 Edit `backend/app/main.py`:
-
 ```python
 rag_service = RAGService(
     model_name="llama3",  # or "mistral", "phi3"
-    embedding_model="all-MiniLM-L6-v2"  # or "bge-m3" for multilingual
+    embedding_model="all-MiniLM-L6-v2"
 )
 ```
 
 ### Frontend API URL
 
 Create `.env` file in root:
-
 ```
 VITE_API_URL=http://localhost:8000
 ```
@@ -156,41 +188,69 @@ VITE_API_URL=http://localhost:8000
 
 ### Backend Issues
 
-**Ollama not connecting:**
+**"Could not connect to Ollama"**
 - Make sure Ollama is running: `ollama serve`
 - Check model is pulled: `ollama list`
 - Test: `ollama run llama3`
 
-**Import errors:**
+**"Module not found" errors**
 - Activate virtual environment
 - Reinstall: `pip install -r requirements.txt`
 
-**Slow responses:**
-- First run loads models (takes time)
+**Slow responses**
+- First run loads models (takes 10-30 seconds)
 - Use smaller model: `phi3` instead of `llama3`
-- Reduce `top_k` in RAG queries
+- Subsequent requests should be faster (2-5 seconds)
 
 ### Frontend Issues
 
-**API connection errors:**
+**API connection errors**
 - Check backend is running on port 8000
 - Check CORS settings in `backend/app/main.py`
 - Verify `VITE_API_URL` in `.env`
 
-**Build errors:**
+**Build errors**
 - Run `npm install` again
 - Clear node_modules and reinstall
+
+### Port Already in Use
+
+**Port 8000 (Backend):**
+- Change port in `backend/app/main.py`
+- Or kill process: `lsof -ti:8000 | xargs kill`
+
+**Port 5173 (Frontend):**
+- Vite will automatically use next available port
+
+## Quick Commands Reference
+
+```bash
+# Check Ollama is running
+ollama list
+
+# Test Ollama model
+ollama run llama3
+
+# Check backend health
+curl http://localhost:8000/health
+
+# Check what's running on ports
+lsof -i :8000  # Backend
+lsof -i :5173  # Frontend
+lsof -i :11434 # Ollama
+```
 
 ## Development
 
 ### Adding New Properties
 
-Edit `backend/app/main.py` and add to `SAMPLE_HOUSE_MANUALS`:
+Add house manual files to `backend/data/house_manuals/` and update `backend/app/main.py`:
 
 ```python
-SAMPLE_HOUSE_MANUALS = {
-    "prop-1": ["House manual text here..."],
-    "prop-3": ["New property manual..."]
+property_files = {
+    "prop-1": "prop-1_downtown_loft.txt",
+    "prop-2": "prop-2_beach_house.txt",
+    "prop-3": "prop-3_new_property.txt",  # Add new property
 }
 ```
 
@@ -200,6 +260,21 @@ Edit `backend/app/rag_service.py`:
 - Adjust `chunk_size` and `chunk_overlap` in `RecursiveCharacterTextSplitter`
 - Modify prompt template in `query()` method
 - Change `top_k` retrieval count
+
+## Model Recommendations
+
+**For Development/Testing:**
+- `phi3` - Very fast, good for testing
+- `mistral` - Good balance
+
+**For Production:**
+- `llama3` - Best quality, slower
+- `llama3:8b` - Good balance of quality/speed
+
+**System Requirements:**
+- RAM: At least 8GB (16GB recommended)
+- Storage: 10GB free space for models
+- CPU: Any modern CPU works (GPU optional but faster)
 
 ## Production Deployment
 
@@ -219,13 +294,3 @@ Edit `backend/app/rag_service.py`:
 ## License
 
 MIT
-
-## Contributing
-
-This is a demonstration project. For production use, consider:
-- Proper authentication/authorization
-- Database persistence
-- Real-time WebSocket updates
-- Production-grade error handling
-- Monitoring and logging
-- Security hardening
