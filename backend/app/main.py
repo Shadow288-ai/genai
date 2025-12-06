@@ -20,15 +20,19 @@ rag_service = RAGService(model_name="mistral", embedding_model="all-MiniLM-L6-v2
 conversations: Dict[str, List[Dict]] = {}
 incidents: Dict[str, Dict] = {}
 calendar_events: Dict[str, Dict] = {}
+troubleshooting_sessions: Dict[str, Dict] = {}  # conversation_id -> {issue, attempts, steps_tried}
 
-def create_incident(property_id: str, conversation_id: str, description: str) -> str:
+def create_incident(property_id: str, conversation_id: str, description: str, troubleshooting_history: str = "") -> str:
     triage = rag_service.triage_issue(description)
+    full_description = description
+    if troubleshooting_history:
+        full_description = f"{description}\n\n=== TROUBLESHOOTING ATTEMPTS ===\n{troubleshooting_history}"
     incident_id = str(uuid.uuid4())
     incidents[incident_id] = {
         "id": incident_id, "property_id": property_id, "conversation_id": conversation_id,
-        "description": description, "category": triage["category"], "severity": triage["severity"],
+        "description": full_description, "category": triage["category"], "severity": triage["severity"],
         "status": "reported", "created_at": datetime.now().isoformat(),
-        "ai_suggested": True, "awaiting_more_info": True
+        "ai_suggested": True, "awaiting_more_info": False
     }
     return incident_id
 
@@ -42,6 +46,67 @@ def find_open_incident(conversation_id: str) -> Optional[str]:
         if inc.get("conversation_id") == conversation_id and inc.get("status") == "reported" and inc.get("awaiting_more_info"):
             return iid
     return None
+
+def find_troubleshooting_session(conversation_id: str) -> Optional[Dict]:
+    return troubleshooting_sessions.get(conversation_id)
+
+def start_troubleshooting(conversation_id: str, issue_description: str, category: str):
+    troubleshooting_sessions[conversation_id] = {
+        "issue": issue_description,
+        "category": category,
+        "attempts": 0,
+        "steps_tried": [],
+        "started_at": datetime.now().isoformat()
+    }
+
+def add_troubleshooting_step(conversation_id: str, step: str, tenant_response: str = ""):
+    if conversation_id in troubleshooting_sessions:
+        troubleshooting_sessions[conversation_id]["attempts"] += 1
+        troubleshooting_sessions[conversation_id]["steps_tried"].append({
+            "step": step,
+            "tenant_response": tenant_response or "",
+            "timestamp": datetime.now().isoformat()
+        })
+
+def get_troubleshooting_summary(conversation_id: str) -> str:
+    if conversation_id not in troubleshooting_sessions:
+        return ""
+    session = troubleshooting_sessions[conversation_id]
+    summary = f"Original issue: {session['issue']}\n\n"
+    summary += f"Troubleshooting attempts: {session['attempts']}\n\n"
+    for i, step_info in enumerate(session['steps_tried'], 1):
+        summary += f"Attempt {i}:\n"
+        summary += f"  - Suggested: {step_info['step']}\n"
+        if step_info['tenant_response']:
+            summary += f"  - Tenant response: {step_info['tenant_response']}\n"
+    return summary
+
+def end_troubleshooting(conversation_id: str):
+    if conversation_id in troubleshooting_sessions:
+        del troubleshooting_sessions[conversation_id]
+
+def generate_troubleshooting_steps(issue_description: str, category: str, previous_steps: List[str] = None) -> str:
+    if not rag_service.llm:
+        return "Can you check if it's plugged in and powered on? Also verify there are no visible signs of damage."
+    previous_context = ""
+    if previous_steps:
+        previous_context = f"\n\nPrevious troubleshooting steps already tried:\n" + "\n".join([f"- {step}" for step in previous_steps])
+    prompt = f"""A tenant has reported an issue: "{issue_description}"
+Category: {category}{previous_context}
+
+Generate 2-3 specific troubleshooting steps the tenant can try. These should be:
+- Simple checks they can do themselves (e.g., "Check if the power button is on", "Verify the cable is plugged in")
+- Diagnostic steps (e.g., "Check for error messages", "Look for indicator lights")
+- NOT repair instructions (no "replace", "fix", "repair", "tighten", etc.)
+
+Format as a friendly, helpful message with clear steps. Keep it concise (3-4 sentences max).
+
+Your response:"""
+    try:
+        return rag_service.llm.invoke(prompt).strip()
+    except Exception as e:
+        print(f"Error generating troubleshooting steps: {e}")
+        return "Can you check if it's plugged in and powered on? Also verify there are no visible signs of damage or error messages."
 
 def generate_followup_questions(issue_description: str, category: str) -> str:
     if not rag_service.llm:
@@ -77,6 +142,19 @@ def is_issue_report(msg: str) -> bool:
                 "not responding", "stopped working", "not turning on", "error"]
     return any(k in msg.lower() for k in keywords)
 
+def is_unfixable_issue(msg: str) -> bool:
+    """Check if issue is clearly unfixable by tenant (theft, major damage, security, etc.)"""
+    msg_lower = msg.lower()
+    unfixable_keywords = [
+        "stolen", "theft", "robbed", "burglary", "break-in", "broken into",
+        "vandalized", "vandalism", "graffiti", "smashed", "destroyed",
+        "fire", "flood", "water damage", "structural", "foundation", "ceiling collapse",
+        "gas leak", "carbon monoxide", "smoke", "electrical fire",
+        "lock broken", "door broken", "window broken", "shattered",
+        "missing", "disappeared", "gone", "not there"
+    ]
+    return any(kw in msg_lower for kw in unfixable_keywords)
+
 def load_house_manuals():
     data_dir = Path(__file__).parent.parent / "data" / "house_manuals"
     if not data_dir.exists():
@@ -92,23 +170,7 @@ def load_house_manuals():
     return manuals
 
 HOUSE_MANUALS = load_house_manuals()
-if not HOUSE_MANUALS:
-    HOUSE_MANUALS = {
-        "prop-1": ["""Downtown Loft - House Manual
-WELCOME: Welcome to your stay! This modern loft is located in the heart of downtown.
-WI-FI: Network: DowntownLoft_Guest, Password: Welcome2024!
-The router is located in the living room, on the shelf next to the TV.
-To reset: Unplug for 10 seconds, then plug back in. Wait 2 minutes for full restart.
-TV & ENTERTAINMENT: The TV is a Samsung 55" Smart TV.
-To turn on: Use the Samsung remote (black, on the coffee table).
-Press the power button, then select HDMI 1 for cable, or use the Smart TV apps.
-Netflix, Hulu, and Disney+ are pre-installed. Use the guest account (no password needed).
-If the TV won't turn on, check that the power strip under the TV is switched on."""],
-        "prop-2": ["""Beach House - House Manual
-WELCOME: Welcome to your beachfront stay!
-WI-FI: Network: BeachHouse_WiFi, Password: OceanView2024!
-AC: Master bedroom has individual AC unit. Use remote control on nightstand."""]
-    }
+
 for prop_id, docs in HOUSE_MANUALS.items():
     rag_service.add_property_documents(prop_id, docs)
 
@@ -137,6 +199,28 @@ def _get_recent_messages(conv_id: str, limit: int = 3) -> List[Dict]:
     # Get last N messages, excluding the most recent one (which is the current message being processed)
     return msgs[-(limit+1):-1] if len(msgs) > 1 else []
 
+def is_escalation_request(msg: str) -> bool:
+    """Check if user is requesting escalation"""
+    msg_lower = msg.lower().strip()
+    escalation_keywords = ["yes", "please", "go ahead", "sure", "ok", "okay", "yes please", "yes do it", 
+                           "escalate", "escalate it", "contact landlord", "notify landlord", "tell landlord"]
+    return any(kw in msg_lower for kw in escalation_keywords)
+
+def last_message_offered_escalation(conversation_id: str) -> bool:
+    """Check if the last AI message offered escalation"""
+    if conversation_id not in conversations or len(conversations[conversation_id]) < 2:
+        return False
+    last_ai_msg = None
+    for msg in reversed(conversations[conversation_id][:-1]):  # Exclude current user message
+        if msg.get("role") == "assistant" or msg.get("sender_type") == "AI":
+            last_ai_msg = msg.get("content", "")
+            break
+    if not last_ai_msg:
+        return False
+    escalation_phrases = ["would you like me to escalate", "escalate this to your landlord", 
+                          "escalate to your landlord", "escalate this"]
+    return any(phrase in last_ai_msg.lower() for phrase in escalation_phrases)
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     try:
@@ -144,6 +228,34 @@ async def chat(request: ChatRequest):
         
         if request.user_role == "LANDLORD":
             return ChatResponse(response="", sources=None, incident_created=False, incident_id=None, incident_details=None)
+        
+        # Check if user wants to escalate (responded yes to escalation offer)
+        if is_escalation_request(request.message) and last_message_offered_escalation(request.conversation_id):
+            # Get the original question/issue from conversation history (the user's message before the AI offered escalation)
+            issue_description = "User requested escalation"
+            for msg in reversed(conversations[request.conversation_id][:-1]):
+                if msg.get("role") == "user" and msg.get("sender_type") == "TENANT":
+                    user_msg = msg.get("content", "")
+                    if user_msg and not is_escalation_request(user_msg):  # Get the actual question, not another escalation request
+                        issue_description = user_msg
+                        break
+            # If we couldn't find a good description, use a generic one
+            if issue_description == "User requested escalation":
+                issue_description = f"User requested escalation: {request.message}"
+            incident_id = create_incident(request.property_id, request.conversation_id, issue_description)
+            inc = incidents[incident_id]
+            response = f"""I've **escalated this to your landlord**.
+
+**Ticket Created:**
+- Ticket ID: {incident_id[:8]}
+- Category: {inc['category']}
+- Severity: {inc['severity']}
+
+Your landlord has been notified and will review your request shortly."""
+            _add_message(request.conversation_id, "assistant", response, "ai-assistant", "AI",
+                        {"incidentId": incident_id, "isAISuggestion": True})
+            return ChatResponse(response=response, sources=None, incident_created=True, 
+                              incident_id=incident_id, incident_details=_get_incident_details(incident_id))
         
         open_incident_id = find_open_incident(request.conversation_id)
         if open_incident_id:
@@ -162,30 +274,100 @@ Your landlord has been notified and will review the complete ticket shortly."""
             return ChatResponse(response=response, sources=None, incident_created=False, 
                               incident_id=open_incident_id, incident_details=_get_incident_details(open_incident_id))
         
-        msg_is_q = is_question(request.message)
-        msg_is_issue = is_issue_report(request.message)
-        incident_id = None
-        incident_created = False
-        
-        if msg_is_issue:
-            incident_id = create_incident(request.property_id, request.conversation_id, request.message)
-            incident_created = True
-            inc = incidents[incident_id]
-            followup = generate_followup_questions(request.message, inc['category'])
-            response = f"""I've created a maintenance ticket for your issue and **escalated it to your landlord**.
+        # Check if there's an active troubleshooting session
+        troubleshooting = find_troubleshooting_session(request.conversation_id)
+        if troubleshooting:
+            session = troubleshooting_sessions[request.conversation_id]
+            
+            # Check if issue is resolved or still broken
+            msg_lower = request.message.lower()
+            is_resolved = any(word in msg_lower for word in ["fixed", "working", "resolved", "it works", "all good", "ok now", "solved", "yes it works", "it's working"])
+            is_still_broken = any(word in msg_lower for word in ["still", "doesn't work", "not working", "broken", "didn't help", "no change", "same problem", "still broken", "still not working"])
+            
+            # If resolved, end troubleshooting
+            if is_resolved:
+                response = "Great! I'm glad that worked. If you need anything else, just let me know!"
+                _add_message(request.conversation_id, "assistant", response, "ai-assistant", "AI", {"isAISuggestion": True})
+                end_troubleshooting(request.conversation_id)
+                return ChatResponse(response=response, sources=None, incident_created=False, incident_id=None, incident_details=None)
+            
+            # Add tenant response to last troubleshooting step
+            if session["steps_tried"]:
+                session["steps_tried"][-1]["tenant_response"] = request.message
+            
+            # If we've already done 2 troubleshooting attempts, escalate
+            if session["attempts"] >= 2:
+                troubleshooting_summary = get_troubleshooting_summary(request.conversation_id)
+                incident_id = create_incident(request.property_id, request.conversation_id, session["issue"], troubleshooting_summary)
+                inc = incidents[incident_id]
+                response = f"""I've tried troubleshooting this issue, but it still needs attention. I've **escalated it to your landlord** with all the details of what we've tried.
 
 **Ticket Created:**
 - Ticket ID: {incident_id[:8]}
 - Category: {inc['category']}
 - Severity: {inc['severity']}
 
-{followup}
+The landlord has been notified with a complete summary of the issue and troubleshooting steps attempted. They'll review and get back to you soon."""
+                _add_message(request.conversation_id, "assistant", response, "ai-assistant", "AI",
+                            {"incidentId": incident_id, "isAISuggestion": True})
+                end_troubleshooting(request.conversation_id)
+                return ChatResponse(response=response, sources=None, incident_created=True, 
+                                  incident_id=incident_id, incident_details=_get_incident_details(incident_id))
+            
+            # Continue troubleshooting - provide next steps
+            previous_steps = [step["step"] for step in session["steps_tried"] if step["step"]]
+            troubleshooting_steps = generate_troubleshooting_steps(session["issue"], session["category"], previous_steps)
+            add_troubleshooting_step(request.conversation_id, troubleshooting_steps)
+            response = f"""Let me help you troubleshoot this further. Try these steps:
 
-The landlord has been notified and will review your ticket once you provide these details."""
+{troubleshooting_steps}
+
+Let me know if this helps or if the issue persists."""
+            _add_message(request.conversation_id, "assistant", response, "ai-assistant", "AI", {"isAISuggestion": True})
+            return ChatResponse(response=response, sources=None, incident_created=False, incident_id=None, incident_details=None)
+        
+        msg_is_q = is_question(request.message)
+        msg_is_issue = is_issue_report(request.message)
+        msg_is_unfixable = is_unfixable_issue(request.message)
+        incident_id = None
+        incident_created = False
+        
+        # For unfixable issues (theft, major damage, etc.), immediately create ticket
+        # Check this FIRST, even if it doesn't match regular issue keywords
+        if msg_is_unfixable:
+            triage = rag_service.triage_issue(request.message)
+            incident_id = create_incident(request.property_id, request.conversation_id, request.message)
+            inc = incidents[incident_id]
+            response = f"""I understand there's an issue that requires immediate attention. I've **created a maintenance ticket** and **notified the landlord**.
+
+**Ticket Created:**
+- Ticket ID: {incident_id[:8]}
+- Category: {inc['category']}
+- Severity: {inc['severity']}
+
+The landlord has been notified and will address this issue promptly."""
             _add_message(request.conversation_id, "assistant", response, "ai-assistant", "AI",
                         {"incidentId": incident_id, "isAISuggestion": True})
             return ChatResponse(response=response, sources=None, incident_created=True, 
                               incident_id=incident_id, incident_details=_get_incident_details(incident_id))
+        
+        # For fixable issues, start troubleshooting
+        if msg_is_issue:
+            triage = rag_service.triage_issue(request.message)
+            start_troubleshooting(request.conversation_id, request.message, triage["category"])
+            troubleshooting_steps = generate_troubleshooting_steps(request.message, triage["category"])
+            add_troubleshooting_step(request.conversation_id, troubleshooting_steps)
+            response = f"""I understand you're having an issue. Let me help you troubleshoot this first.
+
+**Issue detected:** {triage['category']}
+
+Here are some steps to try:
+
+{troubleshooting_steps}
+
+Please try these steps and let me know if the issue is resolved or if it's still not working."""
+            _add_message(request.conversation_id, "assistant", response, "ai-assistant", "AI", {"isAISuggestion": True})
+            return ChatResponse(response=response, sources=None, incident_created=False, incident_id=None, incident_details=None)
         
         if msg_is_q and rag_service.llm:
             try:
@@ -208,7 +390,7 @@ The landlord has been notified and will review your ticket once you provide thes
             except Exception as e:
                 print(f"Error in general conversation: {e}")
         
-        response = ("I'm currently unable to process your message with AI assistance. Your message has been saved and the landlord will see it. Please contact your landlord directly if you need immediate assistance."
+        response = ("I'm currently unable to process your message with AI assistance. Your message has been saved and the landlord will see it. Would you like me to escalate this to your landlord?"
                    if not rag_service.llm else "Thank you for your message. I'll make sure the landlord sees this.")
         _add_message(request.conversation_id, "assistant", response, "ai-assistant", "AI", {})
         return ChatResponse(response=response, sources=None, incident_created=False, incident_id=None, incident_details=None)

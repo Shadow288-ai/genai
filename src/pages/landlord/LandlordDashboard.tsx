@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import type { User, Incident } from "../../types";
 import {
   mockProperties,
-  mockRiskScores,
   mockCalendarEvents,
 } from "../../services/mockData";
 import { apiService } from "../../services/api";
@@ -51,7 +50,10 @@ const LandlordDashboard: React.FC<LandlordDashboardProps> = ({ user }) => {
 
   const totalProperties = mockProperties.length;
   const openIncidents = incidents.filter((i) => i.status !== "resolved").length;
-  const highRiskAssets = mockRiskScores.filter((r) => r.score >= 70).length;
+  // High risk assets: only count assets with open incidents (not just mock risk scores)
+  const highRiskAssets = incidents.filter(
+    (i) => i.status !== "resolved" && i.assetId && (i.severity === "high" || i.severity === "critical")
+  ).length;
   const upcomingEvents = mockCalendarEvents.filter(
     (e) => new Date(e.startTime) >= new Date() && e.status === "confirmed"
   ).length;
@@ -177,10 +179,6 @@ const LandlordDashboard: React.FC<LandlordDashboardProps> = ({ user }) => {
                 {mockCalendarEvents.filter((e) => e.isAISuggested && e.status === "proposed")
                   .length}
               </span>
-            </div>
-            <div className="summary-item">
-              <span className="summary-label">Avg response time:</span>
-              <span className="summary-value">2.5 hours</span>
             </div>
           </div>
         </div>
