@@ -179,14 +179,3 @@ export interface ReplySuggestion {
   tone: "professional" | "friendly" | "apologetic";
 }
 
-// Tenant Form (legacy, keeping for compatibility)
-export interface Tenant {
-  id: number;
-  name: string;
-  email: string;
-  unit: string;
-  phone: string;
-  status: string;
-}
-
-export type TenantFormValues = Omit<Tenant, "id"> & { id?: number };

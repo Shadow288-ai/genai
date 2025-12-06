@@ -90,9 +90,8 @@ You should get a response. Type `/bye` to exit.
 Once Ollama is installed and a model is pulled:
 
 1. Make sure Ollama is running: `ollama serve` (keep terminal open)
-2. Run the setup checker: `python backend/check_setup.py`
-3. Start the backend: `cd backend && python -m app.main`
-4. Start the frontend: `npm run dev`
+2. Start the backend: `cd backend && python -m app.main`
+3. Start the frontend: `npm run dev`
 
 ## Troubleshooting
 

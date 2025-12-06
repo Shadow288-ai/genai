@@ -47,10 +47,10 @@ pip install -r requirements.txt
 python -m app.main
 ```
 
-Or use the startup script:
+Start the backend server:
 ```bash
 cd backend
-./start.sh
+python -m app.main
 ```
 
 Backend should now be running on `http://localhost:8000`

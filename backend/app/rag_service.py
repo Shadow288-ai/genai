@@ -2,11 +2,9 @@
 RAG Service using LangChain, Ollama, and FAISS
 Simplified version maintaining all functionality
 """
-import os
 import json
 import re
 from typing import List, Optional, Tuple
-from pathlib import Path
 
 from langchain_community.llms import Ollama
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -58,7 +56,7 @@ You are a friendly, knowledgeable assistant that helps tenants understand how to
 - Never create incidents yourself - the system handles this automatically
 
 === SPECIAL HANDLING ===
-- For macOS-related questions: Generate humorous roasts in the style provided (macOS is unnecessary, overpriced, etc.)
+- For macOS-related questions: Generate humorous roasts in the style provided (macOS is unnecessary, etc.)
 - For general questions: Use property context when available, fall back to common knowledge
 - For unclear questions: Ask for clarification or offer to escalate
 
