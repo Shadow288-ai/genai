@@ -1,4 +1,3 @@
-// User & Authentication
 export type UserRole = "TENANT" | "LANDLORD" | "ADMIN";
 
 export interface User {
@@ -21,7 +20,6 @@ export interface LoginResult {
   user?: User;
 }
 
-// Property Management
 export type PropertyType = "apartment" | "house" | "studio";
 
 export interface Property {
@@ -31,12 +29,11 @@ export interface Property {
   address: string;
   type: PropertyType;
   assets: Asset[];
-  houseManualDocs?: string[]; // URLs or file paths
+  houseManualDocs?: string[]; // URLs or Paths
   airbnbListingId?: string;
   createdAt: string;
 }
 
-// Assets
 export type AssetType =
   | "LIGHTS"
   | "AC"
@@ -62,21 +59,19 @@ export interface Asset {
   riskScore?: number; // 0-100
 }
 
-// Stays & Reservations
 export type BookingSource = "AIRBNB" | "DIRECT" | "BOOKING" | "OTHER";
 
 export interface Stay {
   id: string;
   propertyId: string;
   tenantId: string;
-  checkIn: string; // ISO date
-  checkOut: string; // ISO date
+  checkIn: string;
+  checkOut: string;
   bookingSource: BookingSource;
   guestName: string;
   status: "upcoming" | "active" | "completed";
 }
 
-// Conversations & Messages
 export interface Conversation {
   id: string;
   propertyId: string;
@@ -110,7 +105,6 @@ export interface Message {
   };
 }
 
-// Incidents & Maintenance
 export type IncidentSeverity = "low" | "medium" | "high" | "critical";
 export type IncidentStatus = "reported" | "triaged" | "scheduled" | "in_progress" | "resolved";
 export type IncidentSource = "TENANT_MESSAGE" | "AI_SUGGESTION" | "MANUAL";
@@ -137,10 +131,9 @@ export interface AssetRiskScore {
   score: number; // 0-100
   computedAt: string;
   modelVersion?: string;
-  reasons?: string[]; // Why this risk score
+  reasons?: string[];
 }
 
-// Calendar & Scheduling
 export type CalendarEventType = "STAY" | "MAINTENANCE" | "CHECK_WINDOW";
 export type CalendarEventStatus = "confirmed" | "proposed" | "cancelled";
 
@@ -149,8 +142,8 @@ export interface CalendarEvent {
   propertyId: string;
   type: CalendarEventType;
   title: string;
-  startTime: string; // ISO datetime
-  endTime: string; // ISO datetime
+  startTime: string;
+  endTime: string;
   status: CalendarEventStatus;
   tenantId?: string;
   assetId?: string;
@@ -162,7 +155,7 @@ export interface CalendarEvent {
 // AI Features
 export interface AIAssistantResponse {
   content: string;
-  sources?: string[]; // References to house manual
+  sources?: string[];
   suggestedActions?: string[];
   confidence?: number;
 }

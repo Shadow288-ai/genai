@@ -10,7 +10,7 @@ import type {
   AssetRiskScore,
 } from "../types";
 
-// Mock Users
+// Mock Objects
 export const mockLandlord: User = {
   id: "landlord-1",
   name: "Alex Property Manager",
@@ -27,7 +27,6 @@ export const mockTenant: User = {
   language: "en",
 };
 
-// Mock Properties
 export const mockProperties: Property[] = [
   {
     id: "prop-1",
@@ -99,7 +98,6 @@ export const mockProperties: Property[] = [
   },
 ];
 
-// Mock Stays
 export const mockStays: Stay[] = [
   {
     id: "stay-1",
@@ -113,7 +111,6 @@ export const mockStays: Stay[] = [
   },
 ];
 
-// Mock Conversations
 export const mockConversations: Conversation[] = [
   {
     id: "conv-1",
@@ -126,13 +123,10 @@ export const mockConversations: Conversation[] = [
   },
 ];
 
-// Mock Messages - REMOVED: Messages are now loaded from backend API
 export const mockMessages: Message[] = [];
 
-// Mock Incidents - REMOVED: Incidents are now loaded from backend API
 export const mockIncidents: Incident[] = [];
 
-// Mock Calendar Events
 export const mockCalendarEvents: CalendarEvent[] = [
   {
     id: "event-1",
@@ -170,7 +164,6 @@ export const mockCalendarEvents: CalendarEvent[] = [
   },
 ];
 
-// Mock Risk Scores
 export const mockRiskScores: AssetRiskScore[] = [
   {
     assetId: "asset-1",
@@ -193,7 +186,6 @@ export const mockRiskScores: AssetRiskScore[] = [
   },
 ];
 
-// Helper functions to get data
 export const getPropertyById = (id: string): Property | undefined => {
   return mockProperties.find((p) => p.id === id);
 };
@@ -203,7 +195,6 @@ export const getConversationById = (id: string): Conversation | undefined => {
 };
 
 export const getMessagesByConversation = (conversationId: string): Message[] => {
-  // Messages are now loaded from backend API, return empty array as fallback
   return [];
 };
 

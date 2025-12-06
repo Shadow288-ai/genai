@@ -89,7 +89,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         }
       } catch (error) {
         console.error("Failed to send message:", error);
-        // Show error message
         if (onNewMessage) {
           const errorMessage: Message = {
             id: `msg-error-${Date.now()}`,

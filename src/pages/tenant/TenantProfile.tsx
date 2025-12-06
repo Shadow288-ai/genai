@@ -15,7 +15,6 @@ const TenantProfile: React.FC<TenantProfileProps> = ({ user }) => {
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setLanguage(e.target.value);
-    // In production, this would save to backend
   };
 
   const handleNotificationChange = (type: keyof typeof notifications) => {
@@ -23,7 +22,6 @@ const TenantProfile: React.FC<TenantProfileProps> = ({ user }) => {
       ...prev,
       [type]: !prev[type],
     }));
-    // In production, this would save to backend
   };
 
   return (

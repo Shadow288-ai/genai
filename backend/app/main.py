@@ -21,7 +21,7 @@ rag_service = RAGService(model_name="mistral", embedding_model="all-MiniLM-L6-v2
 conversations: Dict[str, List[Dict]] = {}
 incidents: Dict[str, Dict] = {}
 calendar_events: Dict[str, Dict] = {}
-troubleshooting_sessions: Dict[str, Dict] = {}  # conversation_id -> {issue, attempts, steps_tried}
+troubleshooting_sessions: Dict[str, Dict] = {}
 
 def create_incident(property_id: str, conversation_id: str, description: str, troubleshooting_history: str = "") -> str:
     triage = rag_service.triage_issue(description)
@@ -114,6 +114,7 @@ Format as a clean list of steps only. Example format:
 Your response (steps only, no greetings or introductions):"""
     try:
         steps = rag_service.llm.invoke(prompt).strip()
+
         # Clean up any greetings or introductions that might have been added
         steps = re.sub(r'^(hello|hi|hey|greetings)[!.,]?\s*', '', steps, flags=re.IGNORECASE)
         steps = re.sub(r'^(let me help|i\'m here to help|i can help)[!.,]?\s*', '', steps, flags=re.IGNORECASE)
@@ -211,6 +212,7 @@ def _get_recent_messages(conv_id: str, limit: int = 3) -> List[Dict]:
     if conv_id not in conversations:
         return []
     msgs = conversations[conv_id]
+
     # Get last N messages, excluding the most recent one (which is the current message being processed)
     return msgs[-(limit+1):-1] if len(msgs) > 1 else []
 
@@ -226,7 +228,7 @@ def last_message_offered_escalation(conversation_id: str) -> bool:
     if conversation_id not in conversations or len(conversations[conversation_id]) < 2:
         return False
     last_ai_msg = None
-    for msg in reversed(conversations[conversation_id][:-1]):  # Exclude current user message
+    for msg in reversed(conversations[conversation_id][:-1]):
         if msg.get("role") == "assistant" or msg.get("sender_type") == "AI":
             last_ai_msg = msg.get("content", "")
             break
@@ -244,16 +246,18 @@ async def chat(request: ChatRequest):
         if request.user_role == "LANDLORD":
             return ChatResponse(response="", sources=None, incident_created=False, incident_id=None, incident_details=None)
         
-        # Check if user wants to escalate (responded yes to escalation offer)
+        # Check if user wants to escalate
         if is_escalation_request(request.message) and last_message_offered_escalation(request.conversation_id):
-            # Get the original question/issue from conversation history (the user's message before the AI offered escalation)
+
+            # Get the original question/issue from conversation history
             issue_description = "User requested escalation"
             for msg in reversed(conversations[request.conversation_id][:-1]):
                 if msg.get("role") == "user" and msg.get("sender_type") == "TENANT":
                     user_msg = msg.get("content", "")
-                    if user_msg and not is_escalation_request(user_msg):  # Get the actual question, not another escalation request
+                    if user_msg and not is_escalation_request(user_msg):
                         issue_description = user_msg
                         break
+
             # If we couldn't find a good description, use a generic one
             if issue_description == "User requested escalation":
                 issue_description = f"User requested escalation: {request.message}"
@@ -294,30 +298,25 @@ Your landlord has been notified and will review the complete ticket shortly."""
         if troubleshooting:
             session = troubleshooting_sessions[request.conversation_id]
             
-            # Check if issue is resolved or still broken
             msg_lower = request.message.lower().strip()
-            # Check for negative indicators first (these override positive ones)
+
             has_negative = any(neg in msg_lower for neg in ["doesn't work", "not working", "still doesn't", "still not", "didn't work", "won't work", "isn't working", "not fixed", "not resolved", "didn't help", "no change", "same problem", "still broken"])
             
-            # Only check for positive resolution if no negative indicators
             is_resolved = False
             if not has_negative:
                 is_resolved = any(phrase in msg_lower for phrase in ["it works", "it's working", "all good", "ok now", "solved", "yes it works", "fixed now", "working now", "resolved", "it's fixed"])
             
             is_still_broken = has_negative or any(word in msg_lower for word in ["still", "broken", "didn't help", "no change", "same problem"])
             
-            # If resolved, end troubleshooting
             if is_resolved and not has_negative:
                 response = "Great! I'm glad that worked. If you need anything else, just let me know!"
                 _add_message(request.conversation_id, "assistant", response, "ai-assistant", "AI", {"isAISuggestion": True})
                 end_troubleshooting(request.conversation_id)
                 return ChatResponse(response=response, sources=None, incident_created=False, incident_id=None, incident_details=None)
             
-            # Add tenant response to last troubleshooting step
             if session["steps_tried"]:
                 session["steps_tried"][-1]["tenant_response"] = request.message
             
-            # If we've already done 2 troubleshooting attempts, escalate
             if session["attempts"] >= 2:
                 troubleshooting_summary = get_troubleshooting_summary(request.conversation_id)
                 incident_id = create_incident(request.property_id, request.conversation_id, session["issue"], troubleshooting_summary)
@@ -336,7 +335,6 @@ The landlord has been notified with a complete summary of the issue and troubles
                 return ChatResponse(response=response, sources=None, incident_created=True, 
                                   incident_id=incident_id, incident_details=_get_incident_details(incident_id))
             
-            # Continue troubleshooting - provide next steps
             previous_steps = [step["step"] for step in session["steps_tried"] if step["step"]]
             troubleshooting_steps = generate_troubleshooting_steps(session["issue"], session["category"], previous_steps)
             add_troubleshooting_step(request.conversation_id, troubleshooting_steps)
@@ -354,8 +352,7 @@ Let me know if this helps or if the issue persists."""
         incident_id = None
         incident_created = False
         
-        # For unfixable issues (theft, major damage, etc.), immediately create ticket
-        # Check this FIRST, even if it doesn't match regular issue keywords
+        # For unfixable issues like theft, major damage, etc., immediately create ticket
         if msg_is_unfixable:
             triage = rag_service.triage_issue(request.message)
             incident_id = create_incident(request.property_id, request.conversation_id, request.message)

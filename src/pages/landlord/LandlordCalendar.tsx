@@ -29,7 +29,6 @@ const LandlordCalendar: React.FC<LandlordCalendarProps> = ({ user }) => {
         const propertyId = selectedProperty === "all" ? undefined : selectedProperty;
         const response = await apiService.getAllCalendarEvents(propertyId);
         
-        // Convert API response to CalendarEvent format
         const loadedEvents: CalendarEvent[] = response.events.map((e: any) => ({
           id: e.id,
           propertyId: e.property_id,
@@ -89,7 +88,6 @@ const LandlordCalendar: React.FC<LandlordCalendarProps> = ({ user }) => {
     return "📅";
   };
 
-  // Group events by date for month view
   const eventsByDate = allEvents.reduce((acc, event) => {
     const date = new Date(event.startTime).toDateString();
     if (!acc[date]) acc[date] = [];
@@ -97,7 +95,7 @@ const LandlordCalendar: React.FC<LandlordCalendarProps> = ({ user }) => {
     return acc;
   }, {} as Record<string, CalendarEvent[]>);
 
-  // Month navigation functions
+  // Navigation functions
   const goToPreviousMonth = () => {
     setSelectedDate((prev) => {
       const newDate = new Date(prev);
@@ -118,7 +116,6 @@ const LandlordCalendar: React.FC<LandlordCalendarProps> = ({ user }) => {
     setSelectedDate(new Date());
   };
 
-  // Get month and year for display
   const getMonthYear = () => {
     return selectedDate.toLocaleDateString("en-US", {
       month: "long",
@@ -213,7 +210,6 @@ const LandlordCalendar: React.FC<LandlordCalendarProps> = ({ user }) => {
                           className="btn-primary btn-sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            // TODO: Implement confirm functionality
                           }}
                         >
                           Confirm
@@ -222,7 +218,6 @@ const LandlordCalendar: React.FC<LandlordCalendarProps> = ({ user }) => {
                           className="btn-secondary btn-sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            // TODO: Implement modify functionality
                           }}
                         >
                           Modify
@@ -252,7 +247,6 @@ const LandlordCalendar: React.FC<LandlordCalendarProps> = ({ user }) => {
             </button>
           </div>
           <div className="calendar-grid">
-            {/* Simplified month view - in production, use a proper calendar library */}
             <div className="calendar-header">
               <div>Sun</div>
               <div>Mon</div>

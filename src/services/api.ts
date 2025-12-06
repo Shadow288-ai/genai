@@ -1,7 +1,3 @@
-/**
- * API service for communicating with the backend RAG service
- */
-
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export interface ChatRequest {

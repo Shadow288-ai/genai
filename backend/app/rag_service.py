@@ -160,6 +160,7 @@ Based on the master prompt guidelines above and the context provided, answer the
 
 Your answer:"""
                 answer = self.llm.invoke(prompt)
+
                 # Remove any references to contacting landlord directly
                 answer = answer.replace("contact your landlord directly", "escalate this to your landlord")
                 answer = answer.replace("contact the landlord", "escalate this to your landlord")
@@ -168,6 +169,7 @@ Your answer:"""
                 answer = answer.replace("by calling", "by escalating")
                 answer = answer.replace("or you can reach out", "or I can escalate")
                 answer = answer.replace("or you can contact", "or I can escalate")
+
                 # Remove false claims about creating tickets (system handles this)
                 answer = re.sub(r'i\'ve created (a ticket|an incident)', 'the system will handle this', answer, flags=re.IGNORECASE)
                 answer = re.sub(r'i created (a ticket|an incident)', 'the system will handle this', answer, flags=re.IGNORECASE)
@@ -209,7 +211,7 @@ Based on the master prompt guidelines above, try to answer using general knowled
 Your response:"""
         try:
             answer = self.llm.invoke(prompt)
-            # Remove any references to contacting landlord directly or using app features
+
             answer = answer.replace("contact your landlord directly", "escalate this to your landlord")
             answer = answer.replace("contact the landlord", "escalate this to your landlord")
             answer = answer.replace("reach out directly", "escalate this")
@@ -218,12 +220,13 @@ Your response:"""
             answer = answer.replace("by calling (", "by escalating (")
             answer = answer.replace("or you can reach out", "or I can escalate")
             answer = answer.replace("or you can contact", "or I can escalate")
-            # Remove false claims about creating tickets (system handles this)
+
             answer = re.sub(r'i\'ve created (a ticket|an incident)', 'the system will handle this', answer, flags=re.IGNORECASE)
             answer = re.sub(r'i created (a ticket|an incident)', 'the system will handle this', answer, flags=re.IGNORECASE)
             answer = re.sub(r'i\'ve escalated', 'the system will escalate', answer, flags=re.IGNORECASE)
             answer = re.sub(r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}', '', answer)
             answer = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '', answer)
+
             # If no escalation offer and answer seems incomplete, add one
             if "landlord" not in answer.lower() and "escalate" not in answer.lower() and ("don't know" in answer.lower() or "not sure" in answer.lower() or "don't have" in answer.lower()):
                 answer += "\n\nWould you like me to escalate this to your landlord?"
@@ -255,7 +258,7 @@ Respond naturally and conversationally. Be friendly, helpful, and brief. If it's
 Your response:"""
         try:
             response = self.llm.invoke(prompt).strip()
-            # Remove any references to contacting landlord directly
+
             response = response.replace("contact your landlord directly", "escalate this to your landlord")
             response = response.replace("contact the landlord", "escalate this to your landlord")
             response = response.replace("reach out directly", "escalate this")
@@ -263,7 +266,7 @@ Your response:"""
             response = response.replace("by calling", "by escalating")
             response = response.replace("or you can reach out", "or I can escalate")
             response = response.replace("or you can contact", "or I can escalate")
-            # Remove false claims about creating tickets (system handles this)
+
             response = re.sub(r'i\'ve created (a ticket|an incident)', 'the system will handle this', response, flags=re.IGNORECASE)
             response = re.sub(r'i created (a ticket|an incident)', 'the system will handle this', response, flags=re.IGNORECASE)
             response = re.sub(r'i\'ve escalated', 'the system will escalate', response, flags=re.IGNORECASE)

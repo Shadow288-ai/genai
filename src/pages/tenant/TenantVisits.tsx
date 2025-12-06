@@ -27,10 +27,9 @@ const TenantVisits: React.FC<TenantVisitsProps> = ({ user }) => {
 
       setIsLoading(true);
       try {
-        // Fetch events for the property of the active stay
+        // Fetch events
         const response = await apiService.getAllCalendarEvents(activeStay.propertyId);
         
-        // Convert API response to CalendarEvent format
         const allEvents: CalendarEvent[] = response.events.map((e: any) => ({
           id: e.id,
           propertyId: e.property_id,
@@ -46,10 +45,7 @@ const TenantVisits: React.FC<TenantVisitsProps> = ({ user }) => {
           description: e.description,
         }));
         
-        // Filter for MAINTENANCE events that are in the future
-        // Show events for this property where:
-        // - tenantId matches this user, OR
-        // - tenantId is not set (property-wide events)
+        // Filter for future maintenance events
         const filteredVisits = allEvents.filter(
           (e) =>
             e.type === "MAINTENANCE" &&
@@ -58,7 +54,6 @@ const TenantVisits: React.FC<TenantVisitsProps> = ({ user }) => {
             (!e.tenantId || e.tenantId === user.id)
         );
         
-        // Sort by start time
         filteredVisits.sort((a, b) => 
           new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
         );

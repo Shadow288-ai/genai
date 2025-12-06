@@ -32,7 +32,7 @@ const LandlordInbox: React.FC<LandlordInboxProps> = ({ user }) => {
     ? mockProperties.find((p) => p.id === conversation.propertyId)
     : null;
 
-  // Load messages from backend when conversation changes
+  // Load messages from backend
   useEffect(() => {
     const loadMessages = async () => {
       if (!conversation) {
@@ -43,7 +43,6 @@ const LandlordInbox: React.FC<LandlordInboxProps> = ({ user }) => {
       setIsLoadingMessages(true);
       try {
         const response = await apiService.getConversation(conversation.id);
-        // Convert API response to Message format
         const loadedMessages: Message[] = response.messages.map((msg: any) => ({
           id: msg.id || `msg-${Date.now()}-${Math.random()}`,
           conversationId: conversation.id,
@@ -54,7 +53,6 @@ const LandlordInbox: React.FC<LandlordInboxProps> = ({ user }) => {
           metadata: msg.metadata || {},
         }));
         
-        // Sort by timestamp
         loadedMessages.sort((a, b) => 
           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         );
@@ -74,7 +72,6 @@ const LandlordInbox: React.FC<LandlordInboxProps> = ({ user }) => {
   }, [conversation?.id, user.id, user.role]);
 
   const handleSendMessage = (content: string) => {
-    // Add user message optimistically
     const userMessage: Message = {
       id: `msg-${Date.now()}`,
       conversationId: conversation!.id,
@@ -102,7 +99,6 @@ const LandlordInbox: React.FC<LandlordInboxProps> = ({ user }) => {
     if (!conversation) return;
     
     try {
-      // Convert messages to API format
       const context = messages.map((msg) => ({
         role: msg.senderType === "AI" ? "assistant" : msg.senderType === "LANDLORD" ? "user" : "user",
         content: msg.content,
@@ -125,7 +121,6 @@ const LandlordInbox: React.FC<LandlordInboxProps> = ({ user }) => {
     if (!conversation) return;
     
     try {
-      // Use the suggest reply endpoint with a summarize prompt
       const context = messages.map((msg) => ({
         role: msg.senderType === "AI" ? "assistant" : msg.senderType === "LANDLORD" ? "user" : "user",
         content: msg.content,
@@ -133,7 +128,6 @@ const LandlordInbox: React.FC<LandlordInboxProps> = ({ user }) => {
       }));
 
       // For now, we'll use the suggest reply with a custom prompt
-      // In production, you'd have a dedicated summarize endpoint
       const response = await apiService.suggestReply({
         conversation_id: conversation.id,
         context: [

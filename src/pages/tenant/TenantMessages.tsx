@@ -41,7 +41,6 @@ const TenantMessages: React.FC<TenantMessagesProps> = ({ user }) => {
       setIsLoadingMessages(true);
       try {
         const response = await apiService.getConversation(conversation.id);
-        // Convert API response to Message format
         const loadedMessages: Message[] = response.messages.map((msg: any) => ({
           id: msg.id || `msg-${Date.now()}-${Math.random()}`,
           conversationId: conversation.id,
@@ -52,7 +51,6 @@ const TenantMessages: React.FC<TenantMessagesProps> = ({ user }) => {
           metadata: msg.metadata || {},
         }));
         
-        // Sort by timestamp
         loadedMessages.sort((a, b) => 
           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         );
@@ -70,7 +68,6 @@ const TenantMessages: React.FC<TenantMessagesProps> = ({ user }) => {
   }, [conversation?.id, user.id, user.role]);
 
   const handleSendMessage = (content: string) => {
-    // Add user message optimistically
     const userMessage: Message = {
       id: `msg-${Date.now()}`,
       conversationId: conversation!.id,
@@ -92,7 +89,6 @@ const TenantMessages: React.FC<TenantMessagesProps> = ({ user }) => {
   };
 
   const handleAskAI = (question: string) => {
-    // This is now handled by ChatInterface directly via API
     console.log("AI question:", question);
   };
 

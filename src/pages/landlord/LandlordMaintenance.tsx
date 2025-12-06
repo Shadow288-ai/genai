@@ -30,7 +30,6 @@ const LandlordMaintenance: React.FC<LandlordMaintenanceProps> = ({ user }) => {
           user.id
         );
         
-        // Convert API response to Incident format
         const loadedIncidents: Incident[] = response.incidents.map((inc: any) => ({
           id: inc.id,
           propertyId: inc.property_id,
@@ -59,7 +58,6 @@ const LandlordMaintenance: React.FC<LandlordMaintenanceProps> = ({ user }) => {
     loadIncidents();
   }, [selectedProperty, user.id]);
 
-  // Filter incidents by selected property
   const filteredIncidents = incidents.filter((i) =>
     selectedProperty === "all"
       ? properties.some((p) => p.id === i.propertyId)
@@ -209,7 +207,7 @@ const LandlordMaintenance: React.FC<LandlordMaintenanceProps> = ({ user }) => {
                 description: description || selectedIncident.description,
               });
 
-              // Update incident status locally
+              // Update incident status
               setIncidents((prev) =>
                 prev.map((inc) =>
                   inc.id === incidentId

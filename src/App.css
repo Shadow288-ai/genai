@@ -1,4 +1,3 @@
-/* Modal Styles */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -164,7 +163,6 @@
   min-height: 80px;
 }
 
-/* Additional component-specific styles */
 
 /* Dashboard */
 .dashboard-cards {
@@ -398,7 +396,7 @@
   color: #065F46;
 }
 
-/* Chat Interface */
+/* CI */
 .messages-page {
   height: calc(100vh - 200px);
   display: flex;
@@ -598,7 +596,6 @@
   scroll-behavior: smooth;
 }
 
-/* Date divider */
 .message-date-divider {
   display: flex;
   align-items: center;
@@ -615,7 +612,6 @@
   font-weight: 500;
 }
 
-/* Message bubbles - Airbnb style */
 .message-bubble {
   display: flex;
   gap: 8px;
@@ -721,7 +717,6 @@
   align-self: flex-start;
 }
 
-/* Typing indicator */
 .typing-indicator {
   display: flex;
   gap: 4px;
@@ -758,7 +753,7 @@
   }
 }
 
-/* Incident Card in Chat */
+/* Incident Card */
 .incident-card {
   margin-top: 8px;
   background: white;
@@ -1366,7 +1361,6 @@
   line-height: 1.4;
 }
 
-/* Tenant Home Redesign */
 .tenant-home-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -1595,7 +1589,7 @@
   transform: translateX(24px);
 }
 
-/* Suggestion panels */
+/* Suggestions */
 .suggestion-panel {
   padding: var(--spacing-md) var(--spacing-lg);
   background: var(--primary-light);
@@ -1616,7 +1610,6 @@
   line-height: 1.6;
 }
 
-/* Responsive adjustments */
 @media (max-width: 768px) {
   .messages-layout {
     flex-direction: column;
@@ -1654,7 +1647,7 @@
   }
 }
 
-/* Mobile Menu Toggle Button */
+/* Menu Button */
 .mobile-menu-toggle {
   display: none;
   flex-direction: column;
@@ -1678,9 +1671,7 @@
   background: var(--primary);
 }
 
-/* Comprehensive Mobile Responsive Styles */
 @media (max-width: 768px) {
-  /* Header and Navigation */
   .app-header {
     padding: var(--spacing-sm) var(--spacing-md);
   }
@@ -1733,7 +1724,6 @@
     display: none;
   }
 
-  /* Main Content */
   .app-main {
     padding: var(--spacing-md);
   }
@@ -1748,7 +1738,6 @@
     font-size: 1.5rem;
   }
 
-  /* Cards */
   .card {
     padding: var(--spacing-md);
   }
@@ -1763,7 +1752,6 @@
     font-size: 1.25rem;
   }
 
-  /* Tables - Make scrollable on mobile */
   .table-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
@@ -1782,7 +1770,6 @@
     padding: var(--spacing-sm);
   }
 
-  /* Forms */
   .form-grid {
     grid-template-columns: 1fr;
   }
@@ -1795,7 +1782,6 @@
     width: 100%;
   }
 
-  /* Buttons - Larger touch targets */
   button,
   .btn-primary,
   .btn-secondary,
@@ -1811,7 +1797,6 @@
     font-size: 0.875rem;
   }
 
-  /* Chat Interface */
   .chat-container {
     height: calc(100vh - 200px);
     min-height: 400px;
@@ -1838,7 +1823,7 @@
   }
 
   .chat-input {
-    font-size: 16px; /* Prevents zoom on iOS */
+    font-size: 16px;
     padding: var(--spacing-sm) var(--spacing-md);
   }
 
@@ -1852,7 +1837,6 @@
     font-size: 0.875rem;
   }
 
-  /* Modals */
   .modal-overlay {
     padding: var(--spacing-md);
     align-items: flex-end;
@@ -1876,7 +1860,6 @@
     padding: var(--spacing-md);
   }
 
-  /* Property Details */
   .property-details {
     grid-template-columns: 1fr;
   }
@@ -1889,12 +1872,10 @@
     width: 100%;
   }
 
-  /* Quick Actions */
   .quick-actions-grid .action-card {
     padding: var(--spacing-md);
   }
 
-  /* Dashboard Cards */
   .dashboard-cards {
     grid-template-columns: 1fr;
     gap: var(--spacing-md);
@@ -1904,7 +1885,6 @@
     padding: var(--spacing-md);
   }
 
-  /* Calendar */
   .calendar-grid {
     grid-template-columns: 1fr;
   }
@@ -1913,12 +1893,10 @@
     order: -1;
   }
 
-  /* Incident Detail Grid */
   .incident-detail-grid {
     grid-template-columns: 1fr;
   }
 
-  /* Maintenance Controls */
   .maintenance-controls {
     flex-direction: column;
     width: 100%;
@@ -1928,7 +1906,6 @@
     width: 100%;
   }
 
-  /* Conversations Sidebar */
   .conversations-sidebar {
     max-height: 300px;
     border-bottom: 1px solid var(--border-light);
@@ -1938,13 +1915,11 @@
     padding: var(--spacing-md);
   }
 
-  /* Visit Cards */
   .visit-card {
     flex-direction: column;
     padding: var(--spacing-md);
   }
 
-  /* Empty States */
   .empty-state {
     padding: var(--spacing-lg);
     min-height: 150px;
@@ -1954,7 +1929,6 @@
     font-size: 3rem;
   }
 
-  /* Auth */
   .auth-wrapper {
     padding: var(--spacing-md);
   }
@@ -1963,7 +1937,6 @@
     max-width: 100%;
   }
 
-  /* Text adjustments */
   h1 {
     font-size: 1.75rem;
   }
@@ -1980,7 +1953,6 @@
     font-size: 1.125rem;
   }
 
-  /* Spacing adjustments */
   .page-container {
     padding: 0;
   }
@@ -1990,7 +1962,6 @@
   }
 }
 
-/* Extra small devices */
 @media (max-width: 480px) {
   .app-main {
     padding: var(--spacing-sm);
@@ -2025,9 +1996,7 @@
   }
 }
 
-/* Touch device optimizations */
 @media (hover: none) and (pointer: coarse) {
-  /* Larger touch targets */
   button,
   a,
   input,
@@ -2036,14 +2005,12 @@
     min-height: 44px;
   }
 
-  /* Remove hover effects on touch devices */
   .btn-primary:hover,
   .btn-secondary:hover,
   .btn-link:hover {
     opacity: 1;
   }
 
-  /* Better tap feedback */
   button:active,
   a:active {
     opacity: 0.7;

@@ -8,13 +8,11 @@ import { mockLandlord, mockTenant } from "./services/mockData";
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(() => {
-    // Check localStorage for persisted user
     const saved = localStorage.getItem("user");
     return saved ? JSON.parse(saved) : null;
   });
 
   const handleLogin = ({ email, password }: LoginCredentials): LoginResult => {
-    // Demo auth - in production, this would be an API call
     if (email === "landlord@example.com" && password === "admin123") {
       const loggedInUser = mockLandlord;
       setUser(loggedInUser);

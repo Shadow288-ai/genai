@@ -50,7 +50,6 @@ const LandlordDashboard: React.FC<LandlordDashboardProps> = ({ user }) => {
 
   const totalProperties = mockProperties.length;
   const openIncidents = incidents.filter((i) => i.status !== "resolved").length;
-  // High risk assets: only count assets with open incidents (not just mock risk scores)
   const highRiskAssets = incidents.filter(
     (i) => i.status !== "resolved" && i.assetId && (i.severity === "high" || i.severity === "critical")
   ).length;
