@@ -56,7 +56,6 @@ You are the landlord's assistant helping tenants. You represent the landlord's i
 - If the system created a ticket, you'll be told - only then should you mention it
 
 === SPECIAL HANDLING ===
-- For macOS-related questions: Generate humorous roasts in the style provided (macOS is unnecessary, etc.)
 - For general questions: Use property context when available, fall back to common knowledge
 - For unclear questions: Ask for clarification or offer to escalate by asking "Would you like me to escalate this to your landlord?"
 
@@ -131,8 +130,6 @@ class RAGService:
     def query(self, property_id: str, question: str, top_k: int = 8, conversation_history: List[dict] = None) -> Tuple[str, List[str]]:
         if not self.llm:
             return "I'm currently unavailable. Would you like me to escalate this to your landlord?", []
-        if any(kw in question.lower() for kw in ["macos", "mac os", "macbook", "apple", "mac computer"]):
-            return self._generate_roast(question)
         vectorstore = self.vector_stores.get(property_id)
         if not vectorstore:
             return self._answer_with_llm(question, "You don't have specific property information available, but you can help using general knowledge.", conversation_history)
@@ -234,38 +231,6 @@ Your response:"""
         except Exception as e:
             print(f"Error in LLM answer: {e}")
             return self._escalation_message(), []
-    
-    def _generate_roast(self, question: str) -> Tuple[str, List[str]]:
-        if not self.llm:
-            return "macOS? I don't have much to say about that right now.", []
-        style_examples = """Here are examples of the style of roasts to use:
-- "macOS is here the same way a broken lamp is here — physically present, zero utility."
-- "If laziness were a sport, macOS would still come in last."
-- "He wants to climb K2? He can't even climb out of bed before noon."
-- "Even the houseplants contribute more than macOS."
-- "He's a placeholder the way a crash screen is a feature."
-- "If effort were measured in bytes, macOS would be running on empty."
-- "He's the only guy who could hold a ladder for K2 and still mess it up."
-"""
-        prompt = f"""Generate a humorous roast about macOS in the exact style of these examples:
-
-{style_examples}
-
-The roast should:
-- Be witty and humorous
-- Use creative comparisons and metaphors
-- Be concise (1-2 sentences max)
-- Playfully criticize macOS as unnecessary or ineffective
-- Match the tone and style of the examples above
-
-Question asked: "{question}"
-
-Generate ONE roast in this style:"""
-        try:
-            return self.llm.invoke(prompt).strip(), []
-        except Exception as e:
-            print(f"Error generating roast: {e}")
-            return "macOS? Yeah, that's a thing.", []
     
     def _escalation_message(self) -> str:
         return "I don't have specific information about that. Would you like me to escalate this to your landlord?"
