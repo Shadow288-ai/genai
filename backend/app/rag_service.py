@@ -40,19 +40,20 @@ You are the landlord's assistant helping tenants. You represent the landlord's i
 ✗ Provide instructions that require technical expertise or tools
 
 === ESCALATION RULES ===
-- For issues that are CLEARLY unfixable by tenants (theft, major damage, structural issues, security breaches, etc.), the system will automatically create a ticket - you should acknowledge this
+- For issues that are CLEARLY unfixable by tenants (theft, major damage, structural issues, security breaches, etc.), the system will automatically create a ticket BEFORE you respond - you will see a confirmation that a ticket was created
 - For issues that MIGHT be fixable through troubleshooting (not working, broken, malfunctioning), the system will provide troubleshooting steps first
 - After 2 troubleshooting attempts, if still not fixed, the system will automatically escalate and create a ticket
 - NEVER tell users to contact the landlord directly or use app features to escalate
 - NEVER mention phone numbers, email addresses, or other contact methods
+- NEVER say you created a ticket or escalated something unless the system has already done it - the system handles this automatically
 - YOU are the app - the system handles escalation automatically when needed
 
 === INCIDENT HANDLING ===
-- When tenants report problems, the system automatically creates maintenance tickets for unfixable issues
+- When tenants report problems, the system automatically creates maintenance tickets for unfixable issues BEFORE you respond
 - For fixable issues, the system provides troubleshooting first, then escalates if needed
 - You should acknowledge issues professionally as the landlord's representative
-- Never create incidents yourself - the system handles this automatically
-- When a ticket is created, confirm it was created and the landlord will be notified
+- NEVER claim to have created a ticket or escalated unless you're confirming what the system already did
+- If the system created a ticket, you'll be told - only then should you mention it
 
 === SPECIAL HANDLING ===
 - For macOS-related questions: Generate humorous roasts in the style provided (macOS is unnecessary, etc.)
@@ -170,6 +171,10 @@ Your answer:"""
                 answer = answer.replace("by calling", "by escalating")
                 answer = answer.replace("or you can reach out", "or I can escalate")
                 answer = answer.replace("or you can contact", "or I can escalate")
+                # Remove false claims about creating tickets (system handles this)
+                answer = re.sub(r'i\'ve created (a ticket|an incident)', 'the system will handle this', answer, flags=re.IGNORECASE)
+                answer = re.sub(r'i created (a ticket|an incident)', 'the system will handle this', answer, flags=re.IGNORECASE)
+                answer = re.sub(r'i\'ve escalated', 'the system will escalate', answer, flags=re.IGNORECASE)
                 answer = re.sub(r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}', '', answer)
                 answer = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '', answer)
                 repair_patterns = ["replace the", "tighten the", "screw the", "wire the", "repair the", "fix the", "install the", "disassemble", "take apart"]
@@ -216,6 +221,10 @@ Your response:"""
             answer = answer.replace("by calling (", "by escalating (")
             answer = answer.replace("or you can reach out", "or I can escalate")
             answer = answer.replace("or you can contact", "or I can escalate")
+            # Remove false claims about creating tickets (system handles this)
+            answer = re.sub(r'i\'ve created (a ticket|an incident)', 'the system will handle this', answer, flags=re.IGNORECASE)
+            answer = re.sub(r'i created (a ticket|an incident)', 'the system will handle this', answer, flags=re.IGNORECASE)
+            answer = re.sub(r'i\'ve escalated', 'the system will escalate', answer, flags=re.IGNORECASE)
             answer = re.sub(r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}', '', answer)
             answer = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '', answer)
             # If no escalation offer and answer seems incomplete, add one
@@ -289,6 +298,10 @@ Your response:"""
             response = response.replace("by calling", "by escalating")
             response = response.replace("or you can reach out", "or I can escalate")
             response = response.replace("or you can contact", "or I can escalate")
+            # Remove false claims about creating tickets (system handles this)
+            response = re.sub(r'i\'ve created (a ticket|an incident)', 'the system will handle this', response, flags=re.IGNORECASE)
+            response = re.sub(r'i created (a ticket|an incident)', 'the system will handle this', response, flags=re.IGNORECASE)
+            response = re.sub(r'i\'ve escalated', 'the system will escalate', response, flags=re.IGNORECASE)
             response = re.sub(r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}', '', response)
             response = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '', response)
             return response

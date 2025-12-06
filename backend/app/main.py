@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, List, Optional
 import uuid
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -99,11 +100,25 @@ Generate 2-3 specific troubleshooting steps the tenant can try. These should be:
 - Diagnostic steps (e.g., "Check for error messages", "Look for indicator lights")
 - NOT repair instructions (no "replace", "fix", "repair", "tighten", etc.)
 
-Format as a friendly, helpful message with clear steps. Keep it concise (3-4 sentences max).
+IMPORTANT: Generate ONLY the troubleshooting steps themselves. Do NOT include:
+- Greetings (no "Hello", "Hi", etc.)
+- Introductions (no "Let me help", "I'm here to help", etc.)
+- Conclusions (no "Thank you", "Let me know", etc.)
+- Just provide the steps as a numbered or bulleted list
 
-Your response:"""
+Format as a clean list of steps only. Example format:
+1. Check if the power button is on
+2. Verify the cable is plugged in
+3. Look for error messages
+
+Your response (steps only, no greetings or introductions):"""
     try:
-        return rag_service.llm.invoke(prompt).strip()
+        steps = rag_service.llm.invoke(prompt).strip()
+        # Clean up any greetings or introductions that might have been added
+        steps = re.sub(r'^(hello|hi|hey|greetings)[!.,]?\s*', '', steps, flags=re.IGNORECASE)
+        steps = re.sub(r'^(let me help|i\'m here to help|i can help)[!.,]?\s*', '', steps, flags=re.IGNORECASE)
+        steps = re.sub(r'(thank you|thanks|let me know|please let us know)[!.,]?\s*$', '', steps, flags=re.IGNORECASE)
+        return steps
     except Exception as e:
         print(f"Error generating troubleshooting steps: {e}")
         return "Can you check if it's plugged in and powered on? Also verify there are no visible signs of damage or error messages."
@@ -280,12 +295,19 @@ Your landlord has been notified and will review the complete ticket shortly."""
             session = troubleshooting_sessions[request.conversation_id]
             
             # Check if issue is resolved or still broken
-            msg_lower = request.message.lower()
-            is_resolved = any(word in msg_lower for word in ["fixed", "working", "resolved", "it works", "all good", "ok now", "solved", "yes it works", "it's working"])
-            is_still_broken = any(word in msg_lower for word in ["still", "doesn't work", "not working", "broken", "didn't help", "no change", "same problem", "still broken", "still not working"])
+            msg_lower = request.message.lower().strip()
+            # Check for negative indicators first (these override positive ones)
+            has_negative = any(neg in msg_lower for neg in ["doesn't work", "not working", "still doesn't", "still not", "didn't work", "won't work", "isn't working", "not fixed", "not resolved", "didn't help", "no change", "same problem", "still broken"])
+            
+            # Only check for positive resolution if no negative indicators
+            is_resolved = False
+            if not has_negative:
+                is_resolved = any(phrase in msg_lower for phrase in ["it works", "it's working", "all good", "ok now", "solved", "yes it works", "fixed now", "working now", "resolved", "it's fixed"])
+            
+            is_still_broken = has_negative or any(word in msg_lower for word in ["still", "broken", "didn't help", "no change", "same problem"])
             
             # If resolved, end troubleshooting
-            if is_resolved:
+            if is_resolved and not has_negative:
                 response = "Great! I'm glad that worked. If you need anything else, just let me know!"
                 _add_message(request.conversation_id, "assistant", response, "ai-assistant", "AI", {"isAISuggestion": True})
                 end_troubleshooting(request.conversation_id)
