@@ -57,3 +57,6 @@ Each page manages its own state and fetches data. React Hooks handle state, and 
 - No tests
 - Limited error handling
 - Missing accessibility features
+
+## Usage of AI
+We mostly used AI to generate parts of the React TypeScript frontend code, including dashboards, inboxes, maintenance incident tracking, calendars, profiles, and visits scheduling. We used it to elaborate backend integration through the API service, which handles endpoints for conversations, incidents, calendar events, etc.
